@@ -1,0 +1,34 @@
+{
+    "name": "espd-tools",
+    "version": "1.4.0",
+    "description": "ESPD Tools to process Excel files",
+    "private": false,
+    "main": "check.js",
+    "type": "commonjs",
+    "author": "Dragos-Constantin Stoica",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/OP-TED/ESPD-EDM.git"
+    },
+    "license": "EUPL",
+    "engineStrict": true,
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "scripts": {
+        "clean": "rmdir /s /q node_modules"
+    },
+    "overrides": {
+        "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    },
+    "dependencies": {
+        "@fastify/static": "^6.12.*",
+        "axios": "^1.7.5",
+        "https-proxy-agent": "^7.0.5",
+        "caporal": "1.4.0",
+        "chalk": "4.1.2",
+        "fastify": "^4.25.2",
+        "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+        "xmlbuilder2": "3.1.1"
+    }
+}
