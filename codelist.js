@@ -22,11 +22,11 @@ var in_excel_we_trust = [
 ]
 
 const log = console.log, 
-      ESPD_version = 'ESPD release v4.0.0', 
+      ESPD_version = 'ESPD release v4.1.0', 
       path_to_folder = '.\\cl\\gc\\';
 
 XLSX.set_fs(fs);
-var name_version = '4.0.0', 
+var name_version = '4.1.0', 
     proxy_user = '', proxy_password = '', proxy_server = 'proxy-t2-lu.welcome.ec.europa.eu', proxy_port = '8012';
 
 program
