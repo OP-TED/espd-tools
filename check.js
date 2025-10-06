@@ -54,6 +54,8 @@ var counter = {
     element_children = {},
     pdt_list = [];
 
+var XMLPath2fix = {};
+
 XLSX.set_fs(fs);
 
 program
@@ -183,14 +185,39 @@ program
             for (const i in sheet_name_list) {
                 log("".padStart(80, "_"));
                 log(chalk.bold(sheet_name_list[i]));
+                XMLPath2fix = {}
                 check_UUID_path(
                     wbk.Sheets[sheet_name_list[i]],
                     what,
                     sheet_name_list[i]
                 );
                 log("\n\n");
+
+                //Fix the XML Path like IDs
+                /*
+                let tmp_data = XLSX.utils.sheet_to_json(wbk.Sheets[sheet_name_list[i]], { defval: '' });
+                if (Object.keys(XMLPath2fix).length > 0){
+                    //There is something to fix
+                    tmp_data = tmp_data.map(row => {
+                        const newRow = { ...row };
+                        for (const key in newRow) {
+                            if (XMLPath2fix[newRow[key]]) {
+                                newRow[key] = XMLPath2fix[newRow[key]];
+                            }
+                        }
+                        return newRow;
+                    });
+                    wbk.Sheets[sheet_name_list[i]] = XLSX.utils.json_to_sheet(tmp_data)
+                }
+                */
+
             }
+
+            //XLSX.writeFile(wbk, 'fix.xlsx')
+
         });
+
+        
     })
 
     .command("extract_codelists","List elements that have a Code List associated with")
@@ -631,6 +658,8 @@ function check_UUID_path(sph, IS_REQUEST, sheetname) {
                         "".padStart(col_idx - 2, "\t"),
                         chalk.bgWhite.black(tag)
                     );
+                    if(!tag_ok && !element[cols.requestpath.column].trim().startsWith('EVICENCE-ID')) 
+                        XMLPath2fix[element[cols.requestpath.column].trim()] = computed_path
                 }
 
                 //one line tag
@@ -703,7 +732,7 @@ function check_UUID_path(sph, IS_REQUEST, sheetname) {
                                 res_computed_path == element[cols.responsecontent1.column],
                                 check3 =
                                     res_computed_path.concat(val_path) ==
-                                    element[cols.responsecontent3.column];
+                                    element[cols.responsecontent3.column].replace('EVIDENCE-ID/','');
 
                             log(
                                 check1 ? chalk.bold.green("[OK]\t") : chalk.bold.red("[NOK]\t"),
@@ -718,6 +747,8 @@ function check_UUID_path(sph, IS_REQUEST, sheetname) {
                                 "".padStart(col_idx - 2, "\t"),
                                 chalk.bgWhite.black(tag)
                             );
+if(!check1 && !element[cols.responsecontent1.column].trim().startsWith('EVICENCE-ID')) 
+                        XMLPath2fix[element[cols.responsecontent1.column].trim()] = res_computed_path
 
                             log(
                                 check3 ? chalk.bold.green("[OK]\t") : chalk.bold.red("[NOK]\t"),
@@ -732,6 +763,9 @@ function check_UUID_path(sph, IS_REQUEST, sheetname) {
                                 "".padStart(col_idx - 2, "\t"),
                                 chalk.bgWhite.black(tag)
                             );
+
+                            if(!check3 && !element[cols.responsecontent3.column].trim().startsWith('EVICENCE-ID')) 
+                        XMLPath2fix[element[cols.responsecontent3.column].trim()] = res_computed_path
                         }
                     }
 
@@ -749,6 +783,8 @@ function check_UUID_path(sph, IS_REQUEST, sheetname) {
                         "".padStart(col_idx - 2, "\t"),
                         chalk.bgWhite.black(tag)
                     );
+                    if(!tag_ok && !element[cols.requestpath.column].trim().startsWith('EVICENCE-ID')) 
+                        XMLPath2fix[element[cols.requestpath.column].trim()] = computed_path
 
                     path_structure.pop();
                 }

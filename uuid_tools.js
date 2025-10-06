@@ -16,6 +16,7 @@ const { program } = require("@caporal/core")
 const { cols } = require("./modules/espd_constants.cjs")
 
 const in_excel_we_trust = [
+    "./criterion/ESPD-criterion_v4.1.0.xlsx",
     //"./criterion/ESPD-criterion_v4.0.0.xlsx",
     //"./criterion/ESPD-criterion_v3.3.0.xlsx",
     //"./criterion/ESPD-criterion_v3.2.0.xlsx",
