@@ -19,7 +19,7 @@ jobs:
           mkdir -p EAtoJSON
           echo "Downloading file from espd-conceptual-model..."
           curl -L -o EAtoJSON/ESPD_CM.eapx \
-            https://raw.githubusercontent.com/your-org/espd-conceptual-model/testingAutomation/conceptual-model/ESPD_CM.eapx
+            https://raw.githubusercontent.com/OP-TED/espd-conceptual-model/testingAutomation/conceptual-model/ESPD_CM.eapx
 
       - name: Commit and push update
         run: |
