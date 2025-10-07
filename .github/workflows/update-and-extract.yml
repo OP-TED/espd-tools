@@ -30,7 +30,7 @@ jobs:
             - name: Extract ESPD_CM.eapx to JSON
               working-directory: EAtoJSON
               run: |
-                node ea2json.js extract conceptual-model/ESPD_CM.eapx
+                node ea2json.js extract conceptual-model/conceptual-model/ESPD_CM.eapx
                 echo: "Extraction completed."
 
             - name: Commit and push changes
