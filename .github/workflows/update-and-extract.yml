@@ -17,14 +17,12 @@ jobs:
             - name: Add or update submodule
               run: |
                   if [ ! -d "EAtoJSON/conceptual-model" ]; then
-                    git submodule add https://github.com/OP-TED/espd-conceptual-model.git EAtoJSON
-
-                    git submodule add <repository-url> EAtoJSON
+                    git submodule add <repository-url> EAtoJSON/conceptual-model
                     git submodule update --init --recursive
                   else
-                    git submodule update --remote --merge EAtoJSON
+                    git submodule update --remote --merge EAtoJSON/conceptual-model
                   fi  
-
+                             
             # Reset submodule to the commit referenced by your main repo
             - name: Set up Node.js
               uses: actions/setup-node@v4
@@ -38,7 +36,7 @@ jobs:
             - name: Extract ESPD_CM.eapx to JSON
               working-directory: EAtoJSON
               run: |
-                node ea2json.js extract conceptual-model/ESPD_CM.eapx
+                node ea2json.js extract conceptual-model/conceptual-model/ESPD_CM.eapx
                 echo "Extraction completed."
 
             - name: Commit and push changes
