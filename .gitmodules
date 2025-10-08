@@ -1,0 +1,3 @@
+[submodule "EAtoJSON/conceptual-model"]
+	path = EAtoJSON/conceptual-model
+	url = https://github.com/OP-TED/espd-conceptual-model.git
