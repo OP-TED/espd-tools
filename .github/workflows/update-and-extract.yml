@@ -16,8 +16,9 @@ jobs:
 
             - name: Update submodule to latest version
               run: |
-                  git submodule update --remote --merge EAtoJSON/conceptual-model
-                
+                  git submodule update --checkout --force EAtoJSON/conceptual-model
+
+                # Reset submodule to the commit referenced by your main repo
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
