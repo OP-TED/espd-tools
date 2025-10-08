@@ -31,7 +31,7 @@ jobs:
               working-directory: EAtoJSON
               run: |
                 node ea2json.js extract conceptual-model/conceptual-model/ESPD_CM.eapx
-                echo: "Extraction completed."
+                echo "Extraction completed."
 
             - name: Commit and push changes
               run: |
