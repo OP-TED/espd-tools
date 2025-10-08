@@ -17,7 +17,7 @@ jobs:
             - name: Add or update submodule
               run: |
                   if [ ! -d "EAtoJSON/conceptual-model" ]; then
-                    git submodule add <repository-url> EAtoJSON/conceptual-model
+                    git submodule add https://github.com/OP-TED/espd-conceptual-model.git EAtoJSON/conceptual-model
                     git submodule update --init --recursive
                   else
                     git submodule update --remote --merge EAtoJSON/conceptual-model
