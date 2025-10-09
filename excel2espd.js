@@ -37,7 +37,7 @@ var schemeVersionID = '4.0.0'
 
 var in_excel_we_trust = [
     //"ESPD-criterion-request-multiple-C25-C32.xlsx",
-    "criterion/ESPD-criterion-response-multiple-C1-C25-C32.xlsx"
+    "criterion/ESPD-criterion_v4.1.0.xlsx"
 ]
 
 var espd_json = {}, evidence_ids = [], lot_ids = [], espd_request, espd_response
@@ -59,7 +59,6 @@ program
             in_excel_we_trust = [ args.excelfile ]
             log(chalk.bold(`Processing ${args.excelfile}`))
         }
-        //log(chalk.blue.bold('Excel to XML transformation'), chalk.red('for ESPD realease v4.0.0.'));
         log('\n\n')
 
 
@@ -76,20 +75,20 @@ program
             .att('@xmlns', 'xmlns:cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2')
             .att('@xmlns', 'xmlns:cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2')
             .att('@xmlns', 'xmlns:espd', `urn:com:grow:espd:${schemeVersionID}`)
-            ,
-            espd_response = create({
-                version: '1.0',
-                encoding: 'UTF-8',
-                defaultNamespace: { ele: 'urn:oasis:names:specification:ubl:schema:xsd:QualificationApplicationResponse-2', att: null },
-                namespaceAlias: { cbc: 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2', cac: 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2' }
-            })
-                .ele('QualificationApplicationResponse')
-                .att('http://www.w3.org/2001/XMLSchema-instance', 'xsi:schemaLocation', 'urn:oasis:names:specification:ubl:schema:xsd:QualificationApplicationResponse-2 ../xsdrt/maindoc/UBL-QualificationApplicationResponse-2.3.xsd')
-                .att('@xmlns', 'xmlns:fn', 'http://www.w3.org/2005/xpath-functions')
-                .att('@xmlns', 'xmlns:xs', 'http://www.w3.org/2001/XMLSchema')
-                .att('@xmlns', 'xmlns:cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2')
-                .att('@xmlns', 'xmlns:cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2')
-                .att('@xmlns', 'xmlns:espd', `urn:com:grow:espd:${schemeVersionID}`)
+
+        espd_response = create({
+            version: '1.0',
+            encoding: 'UTF-8',
+            defaultNamespace: { ele: 'urn:oasis:names:specification:ubl:schema:xsd:QualificationApplicationResponse-2', att: null },
+            namespaceAlias: { cbc: 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2', cac: 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2' }
+        })
+            .ele('QualificationApplicationResponse')
+            .att('http://www.w3.org/2001/XMLSchema-instance', 'xsi:schemaLocation', 'urn:oasis:names:specification:ubl:schema:xsd:QualificationApplicationResponse-2 ../xsdrt/maindoc/UBL-QualificationApplicationResponse-2.3.xsd')
+            .att('@xmlns', 'xmlns:fn', 'http://www.w3.org/2005/xpath-functions')
+            .att('@xmlns', 'xmlns:xs', 'http://www.w3.org/2001/XMLSchema')
+            .att('@xmlns', 'xmlns:cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2')
+            .att('@xmlns', 'xmlns:cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2')
+            .att('@xmlns', 'xmlns:espd', `urn:com:grow:espd:${schemeVersionID}`)
 
         in_excel_we_trust.forEach(xcl => {
             var wbk = XLSX.readFile(xcl)
