@@ -30,7 +30,7 @@ jobs:
                              
             # Reset submodule to the commit referenced by your main repo
             - name: Set up Node.js
-              uses: OP=TED/setup-node@v4
+              uses: OP-TED/setup-node@v4
               with:
                   node-version: '20'
 
