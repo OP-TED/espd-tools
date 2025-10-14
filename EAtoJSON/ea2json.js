@@ -45,9 +45,9 @@ program
                 const connectors = reader.getTable('t_connector').getData()
 
 
-                const outputPath = path.resolve(path.dirname(args.eafile), "../../ESPD_CM.json");
+                const outputPath = path.resolve(path.dirname(args.eafile), "../../EAtoJSON/ESPD_CM.json");
                 fs.writeFileSync(outputPath, JSON.stringify(dbToJson({objects, objectProperties, attributes, connectors}), null, 2));
-                log(chalk.green(`✅ JSON file created at ${outputPath}`));
+                log(`JSON file created at ${outputPath}`);
             }
 
 
