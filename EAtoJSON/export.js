@@ -20,11 +20,36 @@ const loadDatabase = (filePath) => {
 
 const db = loadDatabase('ESPD_CM.eapx')
 
-const result = exportCriteria(db)
+// Export criteria
+console.log('\n=== Exporting Criteria ===')
+const criteriaResult = exportCriteria(db)
 const outputDir = 'outputs'
 if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true })
-const outputFile = path.join(outputDir, 'espd-edm.json')
-fs.writeFileSync(outputFile, JSON.stringify(result, null, 2))
-console.log('wrote', outputFile)
+const criteriaFile = path.join(outputDir, 'espd-edm.json')
+fs.writeFileSync(criteriaFile, JSON.stringify(criteriaResult, null, 2))
+console.log(`✓ Wrote ${criteriaFile}`)
 
-exportCodeLists(db)
+// Export code lists
+console.log('\n=== Exporting Code Lists ===')
+const codeListsResult = exportCodeLists(db)
+const codeListsDir = path.join(outputDir, 'code-lists')
+if (!fs.existsSync(codeListsDir)) fs.mkdirSync(codeListsDir, { recursive: true })
+
+// Write each code list file
+codeListsResult.results.forEach(result => {
+  if (result.success) {
+    const filePath = path.join(codeListsDir, result.fileName)
+    fs.writeFileSync(filePath, result.content, 'utf-8')
+    console.log(`✓ Generated ${result.fileName} (${result.valueCount} values)`)
+  } else {
+    console.error(`✗ Failed to generate ${result.fileName}: ${result.error}`)
+  }
+})
+
+// Final summary
+console.log('\n=== Summary ===')
+console.log(`Criteria: exported to ${criteriaFile}`)
+console.log(`Code Lists: ${codeListsResult.stats.successful}/${codeListsResult.stats.total} files written to ${codeListsDir}`)
+if (codeListsResult.stats.failed > 0) {
+  console.log(`⚠ ${codeListsResult.stats.failed} code list(s) failed`)
+}

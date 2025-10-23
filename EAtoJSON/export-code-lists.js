@@ -1,11 +1,4 @@
-#!/usr/bin/env node
-
-import fs from 'fs'
-import path from 'path'
-import MDBReader from 'mdb-reader'
 import { create } from 'xmlbuilder2'
-
-const [, , eaFile = 'ESPD_CM.eapx', outputDir = './outputs/code-lists'] = process.argv
 
 const EXTERNAL_VOCABULARY_PREFIXES = ['at-voc:', 'esco:']
 
@@ -180,35 +173,41 @@ const extractEnumerations = (database) => {
 // ============================================================================
 
 function exportCodeLists (db) {
-
   const { enumerations, stats } = extractEnumerations(db)
 
   console.log(
     `Found ${stats.totalFound} total enumerations (${stats.espdCount} ESPD, ${stats.externalCount} external excluded)`)
 
-// Create output directory
-  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true })
-
-// Generate .gc files
-  let successCount = 0
-  enumerations.forEach(enumeration => {
+  // Generate XML for each enumeration
+  const results = enumerations.map(enumeration => {
     const shortName = enumeration.name.replace('espd:', '')
-    const outputFile = path.join(outputDir, `${shortName}.gc`)
-
+    
     try {
       const xml = generateGcXml(enumeration)
-      fs.writeFileSync(outputFile, xml, 'utf-8')
-      console.log(
-        `✓ Generated ${shortName}.gc (${enumeration.values.length} values)`)
-      successCount++
+      return {
+        fileName: `${shortName}.gc`,
+        content: xml,
+        valueCount: enumeration.values.length,
+        success: true
+      }
     } catch (error) {
-      console.error(`✗ Failed to generate ${shortName}.gc:`, error.message)
+      return {
+        fileName: `${shortName}.gc`,
+        error: error.message,
+        success: false
+      }
     }
   })
 
-  console.log(`
-Wrote ${successCount}/${enumerations.length} .gc files in ${outputDir}`)
-
+  return {
+    results,
+    stats: {
+      ...stats,
+      total: results.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length
+    }
+  }
 }
 
 export { exportCodeLists }
