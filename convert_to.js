@@ -420,7 +420,14 @@ function JSON2Vue(fragment,
 
                     break;
 
-                case 'SUBCRITERION': case 'REQUIREMENT_GROUP':
+                case 'SUBCRITERION': 
+                    result.template += `<b-card>SUBCRITERION<br/>`
+                    if (Object.hasOwn(fragment[el], 'name') && Object.hasOwn(fragment[el], 'description')) result.template += `<p>${fragment[el].name} <em>${fragment[el].description}</em> [<em>${fragment[el].cardinality ?? '1'}</em>]</p>`
+                    if (Object.hasOwn(fragment[el], 'components')) result = JSON2Vue(fragment[el].components, result)
+                    result.template += `</b-card>`
+                    break;
+                
+                case 'REQUIREMENT_GROUP':
                     result.template += `<b-card>`
                     if (Object.hasOwn(fragment[el], 'name') && Object.hasOwn(fragment[el], 'description')) result.template += `<p>${fragment[el].name} <em>${fragment[el].description}</em> [<em>${fragment[el].cardinality ?? '1'}</em>]</p>`
                     if (Object.hasOwn(fragment[el], 'components')) result = JSON2Vue(fragment[el].components, result)
