@@ -1,15 +1,20 @@
-import fs from 'fs'
-import MDBReader from 'mdb-reader'
-import path from 'path'
-import { exportCodeLists } from './export-code-lists.js'
-import { exportCriteria } from './export-criteria.js'
-import { exportPackage } from './export-package.js'
+#!/usr/bin/env node
 
-// Load database tables
+import fs from 'fs'
+import path from 'path'
+import MDBReader from 'mdb-reader'
+import chalk from 'chalk'
+import caporal from '@caporal/core'
+import { exportCriteria } from './export-criteria.js'
+import { exportCodeLists } from './export-code-lists.js'
+
+const { program } = caporal
+const log = console.log
+
+// Load database
 const loadDatabase = (filePath) => {
   const buffer = fs.readFileSync(path.resolve(filePath))
   const reader = new MDBReader(buffer)
-
   return {
     objects: reader.getTable('t_object').getData(),
     attributes: reader.getTable('t_attribute').getData(),
@@ -18,38 +23,85 @@ const loadDatabase = (filePath) => {
   }
 }
 
-const db = loadDatabase('ESPD_CM.eapx')
+program
+  .version('1.0.0')
+  .name('export')
+  .description('Tool to export ESPD data from EA database')
 
-// Export criteria
-console.log('\n=== Exporting Criteria ===')
-const criteriaResult = exportCriteria(db)
-const outputDir = 'outputs'
-if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true })
-const criteriaFile = path.join(outputDir, 'espd-edm.json')
-fs.writeFileSync(criteriaFile, JSON.stringify(criteriaResult, null, 2))
-console.log(`✓ Wrote ${criteriaFile}`)
+  .command('criteria', 'Export criteria to JSON')
+  .argument('[eafile]', 'EA database file', { default: 'ESPD_CM.eapx' })
+  .option('-o, --output <dir>', 'Output directory', { default: 'outputs' })
+  .action(({ args, options }) => {
+    log(chalk.bold('\n=== Exporting Criteria ==='))
+    const db = loadDatabase(args.eafile)
+    const result = exportCriteria(db)
 
-// Export code lists
-console.log('\n=== Exporting Code Lists ===')
-const codeListsResult = exportCodeLists(db)
-const codeListsDir = path.join(outputDir, 'code-lists')
-if (!fs.existsSync(codeListsDir)) fs.mkdirSync(codeListsDir, { recursive: true })
+    if (!fs.existsSync(options.output)) fs.mkdirSync(options.output, { recursive: true })
+    const outputFile = path.join(options.output, 'espd-edm.json')
+    fs.writeFileSync(outputFile, JSON.stringify(result, null, 2))
+    log(chalk.green(`✓ Wrote ${outputFile}`))
+  })
 
-// Write each code list file
-codeListsResult.results.forEach(result => {
-  if (result.success) {
-    const filePath = path.join(codeListsDir, result.fileName)
-    fs.writeFileSync(filePath, result.content, 'utf-8')
-    console.log(`✓ Generated ${result.fileName} (${result.valueCount} values)`)
-  } else {
-    console.error(`✗ Failed to generate ${result.fileName}: ${result.error}`)
-  }
-})
+  .command('code-lists', 'Export code lists to .gc files')
+  .argument('[eafile]', 'EA database file', { default: 'ESPD_CM.eapx' })
+  .option('-o, --output <dir>', 'Output directory', { default: 'outputs/code-lists' })
+  .action(({ args, options }) => {
+    log(chalk.bold('\n=== Exporting Code Lists ==='))
+    const db = loadDatabase(args.eafile)
+    const { results, stats } = exportCodeLists(db)
 
-// Final summary
-console.log('\n=== Summary ===')
-console.log(`Criteria: exported to ${criteriaFile}`)
-console.log(`Code Lists: ${codeListsResult.stats.successful}/${codeListsResult.stats.total} files written to ${codeListsDir}`)
-if (codeListsResult.stats.failed > 0) {
-  console.log(`⚠ ${codeListsResult.stats.failed} code list(s) failed`)
-}
+    if (!fs.existsSync(options.output)) fs.mkdirSync(options.output, { recursive: true })
+
+    results.forEach(result => {
+      if (result.success) {
+        const filePath = path.join(options.output, result.fileName)
+        fs.writeFileSync(filePath, result.content, 'utf-8')
+        log(chalk.green(`✓ Generated ${result.fileName} (${result.valueCount} values)`))
+      } else {
+        log(chalk.red(`✗ Failed to generate ${result.fileName}: ${result.error}`))
+      }
+    })
+
+    log(chalk.bold(`\n${stats.successful}/${stats.total} files written to ${options.output}`))
+    if (stats.failed > 0) log(chalk.yellow(`⚠ ${stats.failed} code list(s) failed`))
+  })
+
+  .command('all', 'Export both criteria and code lists')
+  .argument('[eafile]', 'EA database file', { default: 'ESPD_CM.eapx' })
+  .option('-o, --output <dir>', 'Output directory', { default: 'outputs' })
+  .action(({ args, options }) => {
+    log(chalk.bold('\n=== Exporting All ==='))
+    const db = loadDatabase(args.eafile)
+
+    // Criteria
+    log(chalk.bold('\n--- Criteria ---'))
+    const criteriaResult = exportCriteria(db)
+    if (!fs.existsSync(options.output)) fs.mkdirSync(options.output, { recursive: true })
+    const criteriaFile = path.join(options.output, 'espd-edm.json')
+    fs.writeFileSync(criteriaFile, JSON.stringify(criteriaResult, null, 2))
+    log(chalk.green(`✓ Wrote ${criteriaFile}`))
+
+    // Code lists
+    log(chalk.bold('\n--- Code Lists ---'))
+    const { results, stats } = exportCodeLists(db)
+    const codeListsDir = path.join(options.output, 'code-lists')
+    if (!fs.existsSync(codeListsDir)) fs.mkdirSync(codeListsDir, { recursive: true })
+
+    results.forEach(result => {
+      if (result.success) {
+        const filePath = path.join(codeListsDir, result.fileName)
+        fs.writeFileSync(filePath, result.content, 'utf-8')
+        log(chalk.green(`✓ Generated ${result.fileName} (${result.valueCount} values)`))
+      } else {
+        log(chalk.red(`✗ Failed to generate ${result.fileName}: ${result.error}`))
+      }
+    })
+
+    // Summary
+    log(chalk.bold('\n=== Summary ==='))
+    log(`Criteria: exported to ${criteriaFile}`)
+    log(`Code Lists: ${stats.successful}/${stats.total} files written to ${codeListsDir}`)
+    if (stats.failed > 0) log(chalk.yellow(`⚠ ${stats.failed} code list(s) failed`))
+  })
+
+program.run()
