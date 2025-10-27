@@ -217,7 +217,7 @@ function excel2bootstrapvue(sph, sheet_name) {
                 //log(tag)
                 switch (tag) {
                     case 'CRITERION':
-                        c_obj.tag = theV != '4.0.0' ? `C${element[col_idx - 1]} - ${c_type}` : `${element[col_idx - 1]} - ${c_type}`
+                        c_obj.tag = theV == '3.3.0' ? `C${element[col_idx - 1]} - ${c_type}` : `${element[col_idx - 1]} - ${c_type}`
                         c_obj.type = tag
                         for (const key in cols) {
                             let clm = cols[key].column
@@ -228,7 +228,9 @@ function excel2bootstrapvue(sph, sheet_name) {
                         c_obj.components = {}
                         break;
 
-                    case 'SUBCRITERION': case 'REQUIREMENT_GROUP':
+                    //In v3.3.0 and v4.0.0 the SUBCRITERION is a group container
+                    //case 'SUBCRITERION': 
+                    case 'REQUIREMENT_GROUP':
                     case 'QUESTION_GROUP': case 'QUESTION_SUBGROUP':
                     case 'REQUIREMENT_SUBGROUP':
 
@@ -275,6 +277,8 @@ function excel2bootstrapvue(sph, sheet_name) {
             if (elm.startsWith('{') && elm.endsWith('}')) {
                 //log(tag)
                 switch (tag) {
+                    //In v4.1.0 SUBCRITERION becomes one line tag
+                    case 'SUBCRITERION':
                     case 'ADDITIONAL_DESCRIPTION_LINE': case 'LEGISLATION':
                     case 'CAPTION': case 'QUESTION': case 'REQUIREMENT':
 
