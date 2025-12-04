@@ -16,7 +16,10 @@
         "node": ">=18.0.0"
     },
     "scripts": {
-        "clean": "rmdir /s /q node_modules"
+        "clean": "rmdir /s /q node_modules",
+        "export-criteria": "node export.js criteria",
+        "export-code-lists": "node export.js code-lists",
+        "export-all": "node export.js all"
     },
     "overrides": {
         "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
