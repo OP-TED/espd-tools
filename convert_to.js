@@ -20,7 +20,7 @@ const { cols, tag_map } = require("./modules/espd_constants.cjs")
 var in_excel_we_trust = [
     //"ESPD-criterion-request-multiple-C25-C32.xlsx",
     //"./criterion/ESPD-criterion-res_v4.0.0.xlsx",
-    "./criterion/ESPD-criterion_v4.0.0.xlsx"
+    "./criterion/ESPD-criterion_v4.1.0.xlsx"
 ]
 
 var counter = {
