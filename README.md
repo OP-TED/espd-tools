@@ -22,8 +22,11 @@ All libraries and commands are contained in the `package.json` file - this is a 
 To setup and install all necessary JavaScript libraries:  
 ```npm install```
 
-To cleanup the libraries folders (this works only under Windows):  
-```npm run clean```
+If the application reports `Cannot find module 'xlsx'`:
+```npm install xlsx```
+
+If the application reports `Cannot find module '@caporal/core'`:
+```npm install @caporal/core```
 
 The folder `XSLT` contains the XSL Transform files that were used until ESPD-EDM v4.0.0 to process and transform the Excel files.  
 `XSLT/xslx-codelists-to-genericode/excel-to-gc-multilang-v1.0.xls` was used to transfer the Excel Codelists file to genericode XML files.  
