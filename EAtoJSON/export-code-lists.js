@@ -114,6 +114,7 @@ const generateGcXml = (enumeration) => {
   statusCol.ele('Data', { 'Type': 'normalizedString', 'Lang': 'eng' })
 
   // Add language columns
+  // We will use one column with multiple languages in this form: {"eng" : "Check Box FALSE"}
   LANGUAGE_CODES.forEach(lang => {
     const langCol = columnSet.ele('Column',
       { 'Id': `name-${lang}`, 'Use': 'optional' })
@@ -121,6 +122,29 @@ const generateGcXml = (enumeration) => {
     langCol.ele('Data', { 'Type': 'string', 'Lang': lang })
   })
 
+  function extractLangText (raw, lang) {
+  if (raw == null) return ''
+  if (typeof raw !== 'string') return String(raw)
+
+  const t = raw.trim()
+
+  // Common case in your output: JSON object as string
+  if (t.startsWith('{') && t.endsWith('}')) {
+    try {
+      const obj = JSON.parse(t)
+      const v = obj?.[lang]
+      if (typeof v === 'string') return v
+    } catch (error) {
+      return {
+        Language: lang,
+        error: error.message,
+        success: false
+      }
+    }
+  }
+
+  return raw
+}  
   // Add Key
   const key = columnSet.ele('Key', { 'Id': 'codeKey' })
   key.ele('ShortName').txt('CodeKey')
@@ -133,15 +157,18 @@ const generateGcXml = (enumeration) => {
   enumeration.values.forEach(value => {
     const row = simpleCodeList.ele('Row')
 
-    row.ele('Value', { 'ColumnRef': 'code' }).ele('SimpleValue').txt(value.code)
+    const codeText = extractLangText(value.code, 'eng')
+    row.ele('Value', { 'ColumnRef': 'code' }).ele('SimpleValue').txt(codeText)
+  
+    const nameText = extractLangText(value.name, 'eng')
+    row.ele('Value', { 'ColumnRef': 'Name' }).ele('SimpleValue').txt(nameText)
 
-    row.ele('Value', { 'ColumnRef': 'Name' }).ele('SimpleValue').txt(value.name)
 
     row.ele('Value', { 'ColumnRef': 'status' }).ele('SimpleValue').txt('ACTIVE')
 
     row.ele('Value', { 'ColumnRef': 'name-eng' }).
       ele('SimpleValue').
-      txt(value.name)
+      txt(nameText)
   })
 
   return root.end({ prettyPrint: true, indent: '  ' })
