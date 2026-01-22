@@ -47,9 +47,16 @@ const transformEnumerationValue = (attr) => ({
   default: attr.Default || null,
 })
 
-const transformEnumeration = (attributes) => (enumObj) => {
-  const enumValues = attributes.filter(isEnumerationValue(enumObj.Object_ID)).
-    map(transformEnumerationValue)
+const transformEnumeration = (attributes, objectProperties) => (enumObj) => {
+  const locationUriProp = objectProperties.find(p =>
+  p.Object_ID === enumObj.Object_ID &&
+  p.Property === 'LocationUri'
+  )
+
+  const locationUri = locationUriProp?.Value ?? null
+
+  const enumValues = attributes.filter(isEnumerationValue(enumObj.Object_ID))
+  .map(transformEnumerationValue)
 
   return {
     name: enumObj.Name,
@@ -60,6 +67,7 @@ const transformEnumeration = (attributes) => (enumObj) => {
     stereotype: enumObj.Stereotype || null,
     valueCount: enumValues.length,
     values: enumValues,
+    locationUri: locationUri
   }
 }
 
@@ -175,22 +183,74 @@ const generateGcXml = (enumeration) => {
 }
 
 // ============================================================================
+// XML Downloading
+// ============================================================================
+const USER_AGENT = 'OP-SDK-codelist-update'
+
+async function downloadGcXml(enumeration) {
+  const url = enumeration.locationUri
+  if (!url) {
+    throw new Error(
+      `No download URL provided for external codelist "${enumeration.name}"`
+    )
+  }
+  if( enumeration.name === 'at-voc:criterion') {
+     throw new Error(
+      `"${enumeration.name}" has been replaced by selection-criterion and exclusion ground.`
+    )
+  }
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'User-Agent': USER_AGENT,
+      'Accept':
+        'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Referer': 'https://github.com/OP-TED/eForms-SDK',
+      'Origin': 'https://github.com/OP-TED/eForms-SDK',
+    },
+    redirect: 'follow',
+  })
+
+  if (!response.ok) {
+    throw new Error(
+      `Cannot download ${url} (HTTP ${response.status} ${response.statusText})`
+    )
+  }
+
+  return await response.text()
+}
+
+// ============================================================================
 // Composition Functions
 // ============================================================================
 
 const extractEnumerations = (database) => {
-  const { objects, attributes } = database
+  const { objects, objectProperties, attributes } = database
 
   const enumerations = objects.filter(isEnumeration).
-    filter(isNotExternalVocabulary).
-    map(transformEnumeration(attributes))
+    map(transformEnumeration(attributes, objectProperties))
+  
+  // Split into internal vs external
+  const enumerationsInternal = enumerations.filter(
+    e => !EXTERNAL_VOCABULARY_PREFIXES.some(prefix =>
+      e.name.startsWith(prefix)
+    )
+  )
 
+  const enumerationsExternal = enumerations.filter(
+    e => EXTERNAL_VOCABULARY_PREFIXES.some(prefix =>
+      e.name.startsWith(prefix)
+    )
+  ) 
   return {
-    enumerations,
+    enumerationsInternal,
+    enumerationsExternal,
     stats: {
       totalFound: objects.filter(isEnumeration).length,
-      espdCount: enumerations.length,
-      externalCount: objects.filter(isEnumeration).length - enumerations.length,
+      espdCount: enumerationsInternal.length,
+      externalCount: enumerationsExternal.length,
     },
   }
 }
@@ -199,19 +259,20 @@ const extractEnumerations = (database) => {
 // Main Processing
 // ============================================================================
 
-function exportCodeLists (db) {
-  const { enumerations, stats } = extractEnumerations(db)
+async function exportCodeLists (db) {
+  const { enumerationsInternal, enumerationsExternal, stats } = extractEnumerations(db)
 
   console.log(
-    `Found ${stats.totalFound} total enumerations (${stats.espdCount} ESPD, ${stats.externalCount} external excluded)`)
+    `Found ${stats.totalFound} total enumerations (${stats.espdCount} ESPD, ${stats.externalCount} external from EU vocabularies).`)
 
   // Generate XML for each enumeration
-  const results = enumerations.map(enumeration => {
+  const resultsInternal = enumerationsInternal.map(enumeration => {
     const shortName = enumeration.name.replace('espd:', '')
     
     try {
       const xml = generateGcXml(enumeration)
       return {
+        kind: 'internal',
         fileName: `${shortName}.gc`,
         content: xml,
         valueCount: enumeration.values.length,
@@ -219,6 +280,7 @@ function exportCodeLists (db) {
       }
     } catch (error) {
       return {
+        kind: 'internal',
         fileName: `${shortName}.gc`,
         error: error.message,
         success: false
@@ -226,15 +288,49 @@ function exportCodeLists (db) {
     }
   })
 
+ const resultsExternal = await Promise.all(
+  enumerationsExternal.map(async (enumeration) => {
+    const shortName = enumeration.name
+      .replace('at-voc:', '')
+      .replace('esco:', '')
+
+    try {
+      const xml = await downloadGcXml(enumeration)
+
+      return {
+        kind: 'external',
+        fileName: `${shortName}.gc`,
+        content: xml,
+        success: true
+      }
+    } catch (error) {
+      return {
+        kind: 'external',
+        fileName: `${shortName}.gc`,
+        error: error.message,
+        success: false
+      }
+    }
+  })
+)
+
+
   return {
-    results,
+    internal: resultsInternal,
+    external: resultsExternal,
     stats: {
       ...stats,
-      total: results.length,
-      successful: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length
+      internal: {
+        total: resultsInternal.length,
+        successful: resultsInternal.filter(r => r.success).length,
+        failed: resultsInternal.filter(r => !r.success).length
+      },
+      external: {
+        total: resultsExternal.length,
+        successful: resultsExternal.filter(r => r.success).length,
+        failed: resultsExternal.filter(r => !r.success).length
+      }
     }
   }
 }
-
 export { exportCodeLists }
