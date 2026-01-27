@@ -456,9 +456,6 @@ const exportPackage = (db, packageCode, orderMap = null) => {
 
   const criterion = buildEDMTree(db, rootNode, enrichedElements, code, orderMap)
 
-  // if (orderMap) {
-  //   reorderByOrderMap(criterion, orderMap)
-  // }
   return criterion
 }
 
