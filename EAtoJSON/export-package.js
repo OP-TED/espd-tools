@@ -92,6 +92,12 @@ function getLabelPrefix(label) {
   return ''
 }
 
+function getLabelNumber(label) {
+  if (!label) return Number.MAX_SAFE_INTEGER
+  const match = label.match(/\d+$/)
+  return match ? parseInt(match[0], 10) : Number.MAX_SAFE_INTEGER
+}
+
 // ============================================
 // Database Operations
 // ============================================
@@ -145,23 +151,36 @@ function orderChildren({
   orderMap,
   isRoot = false
 }) {
-  // Explicit structure order (from EA)
-  const explicit = orderMap?.[parentPath]
-  if (explicit) {
-    return explicit
-      .map(label => children.find(c => extractLabel(c.Name) === label))
-      .filter(Boolean)
-  }
+  // // Explicit structure order (from EA)
+  // const explicit = orderMap?.[parentPath]
+  // if (explicit) {
+  //   return explicit
+  //     .map(label => children.find(c => extractLabel(c.Name) === label))
+  //     .filter(Boolean)
+  // }
 
   // Root ordering by TYPE
   if (isRoot) {
     return [...children].sort((a, b) => {
-      const ta = getNodeType(a)
-      const tb = getNodeType(b)
-      return ROOT_TYPE_ORDER.indexOf(ta) - ROOT_TYPE_ORDER.indexOf(tb)
-    })
-  }
+    const ta = getNodeType(a)
+    const tb = getNodeType(b)
 
+    const ra = ROOT_TYPE_ORDER.indexOf(ta)
+    const rb = ROOT_TYPE_ORDER.indexOf(tb)
+
+    // Dfferent types → type order wins
+    if (ra !== rb) return ra - rb
+
+    // Same type → order by number (QG1 < QG2, RG1 < RG2, etc.)
+    const la = extractLabel(a.Name)
+    const lb = extractLabel(b.Name)
+
+    const na = getLabelNumber(la)
+    const nb = getLabelNumber(lb)
+
+    return na - nb
+  })
+}
   // Group ordering by LABEL prefix
   if (GROUP_TYPES_FOR_ORDERING.includes(parentType)) {
     let order = null
@@ -170,14 +189,14 @@ function orderChildren({
       parentType === 'QUESTION_GROUP' ||
       parentType === 'QUESTION_SUBGROUP'
     ) {
-      order = ['Q','RQ', 'CA', 'QSG','RSG']
+      order = ['CA','Q','RQ', 'QSG','RSG']
     }
 
     if (
       parentType === 'REQUIREMENT_GROUP' ||
       parentType === 'REQUIREMENT_SUBGROUP'
     ) {
-      order = ['RQ', 'Q', 'CA', 'RSG','QSG']
+      order = ['CA','RQ', 'Q', 'RSG','QSG']
     }
 
     if (order) {
@@ -193,7 +212,9 @@ function orderChildren({
         if (ra !== rb) return ra - rb
 
         
-        return la.localeCompare(lb)
+      const na = getLabelNumber(la)
+      const nb = getLabelNumber(lb)
+      return na - nb
       })
     }
   }
@@ -404,35 +425,6 @@ const rawChildren = getChildrenOf(db, rootNode.Object_ID, objectsById)
 
   return criterion
 }
-
-// function reorderByOrderMap(node, orderMap, currentPath = '') {
-//   if (!node?.components || !orderMap) return
-
-//   const order = orderMap[currentPath]
-//   if (!order) return
-
-//   const reordered = {}
-
-//   order.forEach(key => {
-//     if (node.components[key]) {
-//       reordered[key] = node.components[key]
-//     }
-//   })
-
-//   Object.keys(node.components).forEach(key => {
-//     if (!reordered[key]) {
-//       reordered[key] = node.components[key]
-//     }
-//   })
-
-//   node.components = reordered
-
-//   // recurse
-//   Object.entries(node.components).forEach(([key, child]) => {
-//     const nextPath = currentPath ? `${currentPath}/${key}` : key
-//     reorderByOrderMap(child, orderMap, nextPath)
-//   })
-// }
 
 // ============================================
 // Main Export Function
