@@ -23,6 +23,16 @@ const GROUP_TYPES = new Set([
   'REQUIREMENT_GROUP', 'REQUIREMENT_SUBGROUP',
   'GROUP', 'SUBGROUP', 'SUBCRITERION',
 ])
+const ROOT_TYPE_ORDER = [
+  'SUBCRITERION',
+  'LEGISLATION',
+  'REQUIREMENT_GROUP',
+  'QUESTION_GROUP',
+]
+const GROUP_TYPES_FOR_ORDERING = [  'REQUIREMENT_GROUP',
+  'QUESTION_GROUP',  'REQUIREMENT_SUBGROUP',
+  'QUESTION_SUBGROUP','GROUP', 'SUBGROUP']
+
 
 const CARDINALITY_MAP = {
   '0..1': '1',      // Optional single -> mandatory
@@ -72,6 +82,16 @@ const getNodeType = (node) => {
   return 'CRITERION'
 }
 
+function getLabelPrefix(label) {
+  if (!label) return ''
+  if (label.startsWith('QSG')) return 'QSG'
+  if (label.startsWith('RSG')) return 'RSG'
+  if (label.startsWith('Q')) return 'Q'
+  if (label.startsWith('R')) return 'R'
+  if (label.startsWith('CA')) return 'CA'
+  return ''
+}
+
 // ============================================
 // Database Operations
 // ============================================
@@ -117,6 +137,69 @@ const getChildrenOf = (db, objectId, objectsById) => {
       }
     }).
     filter(Boolean)
+}
+function orderChildren({
+  children,
+  parentPath,
+  parentType,
+  orderMap,
+  isRoot = false
+}) {
+  // Explicit structure order (from EA)
+  const explicit = orderMap?.[parentPath]
+  if (explicit) {
+    return explicit
+      .map(label => children.find(c => extractLabel(c.Name) === label))
+      .filter(Boolean)
+  }
+
+  // Root ordering by TYPE
+  if (isRoot) {
+    return [...children].sort((a, b) => {
+      const ta = getNodeType(a)
+      const tb = getNodeType(b)
+      return ROOT_TYPE_ORDER.indexOf(ta) - ROOT_TYPE_ORDER.indexOf(tb)
+    })
+  }
+
+  // Group ordering by LABEL prefix
+  if (GROUP_TYPES_FOR_ORDERING.includes(parentType)) {
+    let order = null
+
+    if (
+      parentType === 'QUESTION_GROUP' ||
+      parentType === 'QUESTION_SUBGROUP'
+    ) {
+      order = ['Q','RQ', 'CA', 'QSG','RSG']
+    }
+
+    if (
+      parentType === 'REQUIREMENT_GROUP' ||
+      parentType === 'REQUIREMENT_SUBGROUP'
+    ) {
+      order = ['RQ', 'Q', 'CA', 'RSG','QSG']
+    }
+
+    if (order) {
+      return [...children].sort((a, b) => {
+        const la = extractLabel(a.Name) || ''
+        const lb = extractLabel(b.Name) || ''
+
+        const pa = getLabelPrefix(la)
+        const pb = getLabelPrefix(lb)
+
+        const ra = order.indexOf(pa)
+        const rb = order.indexOf(pb)
+        if (ra !== rb) return ra - rb
+
+        
+        return la.localeCompare(lb)
+      })
+    }
+  }
+
+  // Fallback
+  return children
 }
 
 // ============================================
@@ -193,7 +276,7 @@ const generateUniqueLabel = (counters, baseLabel, parentPath, type) => {
   return `${baseLabel}${count > 1 ? count : ''}`
 }
 
-const buildGroup = (db, objectsById, counters) => (node, parentPath) => {
+const buildGroup = (db, objectsById, counters, orderMap) => (node, parentPath) => {
   const type = getNodeType(node)
   const rawLabel = extractLabel(node.Name)
 
@@ -221,22 +304,29 @@ const buildGroup = (db, objectsById, counters) => (node, parentPath) => {
   }
 
   // Process children recursively
-  const children = getChildrenOf(db, node.Object_ID, objectsById)
+  const rawChildren = getChildrenOf(db, node.Object_ID, objectsById)
+
+  const children = orderChildren({
+    children: rawChildren,
+    parentPath: currentPath,
+    parentType: type,
+    orderMap
+  })
   children.forEach(child => {
     const { label: childLabel, component: childComponent } =
-      buildComponent(db, objectsById, counters)(child, currentPath)
+      buildComponent(db, objectsById, counters, orderMap)(child, currentPath)
     group.components[childLabel] = childComponent
   })
 
   return { label, component: group }
 }
 
-const buildComponent = (db, objectsById, counters) => (
+const buildComponent = (db, objectsById, counters, orderMap) => (
   node, parentPath = '') => {
   const type = getNodeType(node)
 
   if (GROUP_TYPES.has(type)) {
-    return buildGroup(db, objectsById, counters)(node, parentPath)
+    return buildGroup(db, objectsById, counters, orderMap)(node, parentPath)
   }
 
   return buildSimpleComponent(node, parentPath)
@@ -284,7 +374,7 @@ const createRootCriterion = (rootNode, code) => {
   }
 }
 
-const buildEDMTree = (db, rootNode, packageElements, code) => {
+const buildEDMTree = (db, rootNode, packageElements, code, orderMap) => {
   // Create lookup map for efficiency
   const objectsById = new Map(
     packageElements.map(elem => [elem.Object_ID, elem]),
@@ -294,7 +384,15 @@ const buildEDMTree = (db, rootNode, packageElements, code) => {
   const counters = {}
 
   // Process all children
-  const children = getChildrenOf(db, rootNode.Object_ID, objectsById)
+const rawChildren = getChildrenOf(db, rootNode.Object_ID, objectsById)
+
+  const children = orderChildren({
+    children: rawChildren,
+    parentPath: criterion.requestpath,
+    parentType: 'CRITERION',
+    orderMap,
+    isRoot: true
+  })
   children.forEach(child => {
     const { label, component } = buildComponent(
       db,
@@ -307,34 +405,34 @@ const buildEDMTree = (db, rootNode, packageElements, code) => {
   return criterion
 }
 
-function reorderByOrderMap(node, orderMap, currentPath = '') {
-  if (!node?.components || !orderMap) return
+// function reorderByOrderMap(node, orderMap, currentPath = '') {
+//   if (!node?.components || !orderMap) return
 
-  const order = orderMap[currentPath]
-  if (!order) return
+//   const order = orderMap[currentPath]
+//   if (!order) return
 
-  const reordered = {}
+//   const reordered = {}
 
-  order.forEach(key => {
-    if (node.components[key]) {
-      reordered[key] = node.components[key]
-    }
-  })
+//   order.forEach(key => {
+//     if (node.components[key]) {
+//       reordered[key] = node.components[key]
+//     }
+//   })
 
-  Object.keys(node.components).forEach(key => {
-    if (!reordered[key]) {
-      reordered[key] = node.components[key]
-    }
-  })
+//   Object.keys(node.components).forEach(key => {
+//     if (!reordered[key]) {
+//       reordered[key] = node.components[key]
+//     }
+//   })
 
-  node.components = reordered
+//   node.components = reordered
 
-  // recurse
-  Object.entries(node.components).forEach(([key, child]) => {
-    const nextPath = currentPath ? `${currentPath}/${key}` : key
-    reorderByOrderMap(child, orderMap, nextPath)
-  })
-}
+//   // recurse
+//   Object.entries(node.components).forEach(([key, child]) => {
+//     const nextPath = currentPath ? `${currentPath}/${key}` : key
+//     reorderByOrderMap(child, orderMap, nextPath)
+//   })
+// }
 
 // ============================================
 // Main Export Function
@@ -345,6 +443,7 @@ const exportPackage = (db, packageCode, orderMap = null) => {
   if (!code) {
     throw new Error(`Invalid package code format: ${packageCode}`)
   }
+
 
   const packageElements = getPackageElements(db, code)
 
@@ -363,11 +462,11 @@ const exportPackage = (db, packageCode, orderMap = null) => {
     throw new Error('No root node found in package')
   }
 
-  const criterion = buildEDMTree(db, rootNode, enrichedElements, code)
+  const criterion = buildEDMTree(db, rootNode, enrichedElements, code, orderMap)
 
-  if (orderMap) {
-    reorderByOrderMap(criterion, orderMap)
-  }
+  // if (orderMap) {
+  //   reorderByOrderMap(criterion, orderMap)
+  // }
   return criterion
 }
 
