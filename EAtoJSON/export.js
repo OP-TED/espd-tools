@@ -15,8 +15,10 @@ const log = console.log
 const loadDatabase = (filePath) => {
   const buffer = fs.readFileSync(path.resolve(filePath))
   const reader = new MDBReader(buffer)
+
   return {
     objects: reader.getTable('t_object').getData(),
+    objectProperties: reader.getTable('t_objectproperties').getData(),
     attributes: reader.getTable('t_attribute').getData(),
     packages: reader.getTable('t_package').getData(),
     connectors: reader.getTable('t_connector').getData(),
@@ -45,10 +47,10 @@ program
   .command('code-lists', 'Export code lists to .gc files')
   .argument('[eafile]', 'EA database file', { default: 'ESPD_CM.eapx' })
   .option('-o, --output <dir>', 'Output directory', { default: 'outputs/code-lists' })
-  .action(({ args, options }) => {
+  .action(async ({ args, options }) => {
     log(chalk.bold('\n=== Exporting Code Lists ==='))
     const db = loadDatabase(args.eafile)
-    const { results, stats } = exportCodeLists(db)
+    const { results, stats } = await exportCodeLists(db)
 
     if (!fs.existsSync(options.output)) fs.mkdirSync(options.output, { recursive: true })
 
@@ -69,7 +71,7 @@ program
   .command('all', 'Export both criteria and code lists')
   .argument('[eafile]', 'EA database file', { default: 'ESPD_CM.eapx' })
   .option('-o, --output <dir>', 'Output directory', { default: 'outputs' })
-  .action(({ args, options }) => {
+  .action(async ({ args, options }) => {
     log(chalk.bold('\n=== Exporting All ==='))
     const db = loadDatabase(args.eafile)
 
@@ -83,11 +85,11 @@ program
 
     // Code lists
     log(chalk.bold('\n--- Code Lists ---'))
-    const { results, stats } = exportCodeLists(db)
+    const { internal, external, stats } = await exportCodeLists(db)
     const codeListsDir = path.join(options.output, 'code-lists')
     if (!fs.existsSync(codeListsDir)) fs.mkdirSync(codeListsDir, { recursive: true })
 
-    results.forEach(result => {
+    internal.forEach(result => {
       if (result.success) {
         const filePath = path.join(codeListsDir, result.fileName)
         fs.writeFileSync(filePath, result.content, 'utf-8')
@@ -96,7 +98,15 @@ program
         log(chalk.red(`✗ Failed to generate ${result.fileName}: ${result.error}`))
       }
     })
-
+    external.forEach(result => {
+      if (result.success) {
+        const filePath = path.join(codeListsDir, result.fileName)
+        fs.writeFileSync(filePath, result.content, 'utf-8')
+        log(chalk.green(`✓ Downloaded ${result.fileName}`))
+      } else {
+        log(chalk.red(`✗ Failed to download ${result.fileName}: ${result.error}`))
+      }
+    })
     // Summary
     log(chalk.bold('\n=== Summary ==='))
     log(`Criteria: exported to ${criteriaFile}`)

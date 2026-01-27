@@ -36,7 +36,7 @@ const CARDINALITY_MAP = {
 // ============================================
 
 const normalizeCode = (code) => {
-  const match = code.match(/^([A-Za-z])(\d{1,2})$/)
+  const match = code.match(/^([A-Za-z]{1,2})(\d{1,2})$/)
   if (!match) return undefined
   const [, letter, digits] = match
   return letter.toUpperCase() + digits.padStart(2, '0')
@@ -198,7 +198,7 @@ const buildGroup = (db, objectsById, counters) => (node, parentPath) => {
   const rawLabel = extractLabel(node.Name)
 
   // Generate unique label
-  const label = generateUniqueLabel(
+  const label = rawLabel ?? generateUniqueLabel(
     counters,
     rawLabel || type.substring(0, 2),
     parentPath,
@@ -258,9 +258,9 @@ const createRootCriterion = (rootNode, code) => {
 
   if (code.startsWith('AI')) {
     type = 'ADDITIONAL_INFORMATION'
-    tag = `${code}_OT`
+    tag = `${code}`
   } else if (code.startsWith('C')) {
-    tag = `${code}_EG`
+    tag = `${code}`
   }
 
   // Extract typeCode from TypeCode field or Name suffix
@@ -307,11 +307,40 @@ const buildEDMTree = (db, rootNode, packageElements, code) => {
   return criterion
 }
 
+function reorderByOrderMap(node, orderMap, currentPath = '') {
+  if (!node?.components || !orderMap) return
+
+  const order = orderMap[currentPath]
+  if (!order) return
+
+  const reordered = {}
+
+  order.forEach(key => {
+    if (node.components[key]) {
+      reordered[key] = node.components[key]
+    }
+  })
+
+  Object.keys(node.components).forEach(key => {
+    if (!reordered[key]) {
+      reordered[key] = node.components[key]
+    }
+  })
+
+  node.components = reordered
+
+  // recurse
+  Object.entries(node.components).forEach(([key, child]) => {
+    const nextPath = currentPath ? `${currentPath}/${key}` : key
+    reorderByOrderMap(child, orderMap, nextPath)
+  })
+}
+
 // ============================================
 // Main Export Function
 // ============================================
 
-const exportPackage = (db, packageCode) => {
+const exportPackage = (db, packageCode, orderMap = null) => {
   const code = normalizeCode(packageCode)
   if (!code) {
     throw new Error(`Invalid package code format: ${packageCode}`)
@@ -334,8 +363,12 @@ const exportPackage = (db, packageCode) => {
     throw new Error('No root node found in package')
   }
 
-  // Build and return the tree
-  return buildEDMTree(db, rootNode, enrichedElements, code)
+  const criterion = buildEDMTree(db, rootNode, enrichedElements, code)
+
+  if (orderMap) {
+    reorderByOrderMap(criterion, orderMap)
+  }
+  return criterion
 }
 
 export { exportPackage }
