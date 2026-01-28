@@ -49,11 +49,22 @@ const transformEnumerationValue = (attr) => ({
 
 const transformEnumeration = (attributes, objectProperties) => (enumObj) => {
   const locationUriProp = objectProperties.find(p =>
-  p.Object_ID === enumObj.Object_ID &&
-  p.Property === 'LocationUri'
-  )
+  p.Object_ID === enumObj.Object_ID && p.Property === 'LocationUri')
+
+  const canonicalUriProp = objectProperties.find(p =>
+  p.Object_ID === enumObj.Object_ID && p.Property == 'CanonicalUri')
+
+  const canonicalVersionUriProp = objectProperties.find(p =>
+  p.Object_ID === enumObj.Object_ID && p.Property == 'CanonicalVersionUri')
+
+
+  const versionProp = objectProperties.find(p =>
+  p.Object_ID === enumObj.Object_ID && p.Property == 'Version')
 
   const locationUri = locationUriProp?.Value ?? null
+  const canonicalUri = canonicalUriProp?.Value ?? null
+  const canonicalVersionUri = canonicalVersionUriProp?.Value ?? null
+  const version = versionProp?.Value ?? null
 
   const enumValues = attributes.filter(isEnumerationValue(enumObj.Object_ID))
   .map(transformEnumerationValue)
@@ -67,7 +78,10 @@ const transformEnumeration = (attributes, objectProperties) => (enumObj) => {
     stereotype: enumObj.Stereotype || null,
     valueCount: enumValues.length,
     values: enumValues,
-    locationUri: locationUri
+    locationUri: locationUri,
+    canonicalUri: canonicalUri,
+    canonicalVersionUri: canonicalVersionUri,
+    version: version
   }
 }
 
@@ -89,14 +103,10 @@ const generateGcXml = (enumeration) => {
   identification.ele('ShortName').txt(shortName)
   identification.ele('LongName').txt(shortName)
   identification.ele('LongName', { 'Identifier': 'listId' }).txt(listId)
-  identification.ele('Version').txt('4.1.0')
-  identification.ele('CanonicalUri').txt('https://github.com/OP-TED/ESPD-EDM')
-  identification.ele('CanonicalVersionUri').
-    txt('https://github.com/OP-TED/ESPD-EDM/tree/v4.1.0/')
-  identification.ele('LocationUri').
-    txt(
-      `https://raw.githubusercontent.com/OP-TED/ESPD-EDM/v4.1.0/codelists/gc/${shortName}.gc`)
-
+  identification.ele('Version').txt(enumeration.version)
+  identification.ele('CanonicalUri').txt(enumeration.canonicalUri)
+  identification.ele('CanonicalVersionUri').txt(enumeration.canonicalVersionUri)
+  identification.ele('LocationUri').txt(enumeration.locationUri)
   const agency = identification.ele('Agency')
   agency.ele('ShortName').txt('Publications Office')
   agency.ele('LongName').txt('Publications Office of the European Union')
