@@ -129,7 +129,11 @@ const findRootNode = (db, elements) => {
     db.connectors.map(conn => conn.End_Object_ID),
   )
 
-  return elements.find(elem => !incomingConnections.has(elem.Object_ID))
+ const structuralElements = elements.filter(
+    e => e.Object_Type === "Object"
+  )
+  var rootNode = structuralElements.find(elem => !incomingConnections.has(elem.Object_ID))
+  return rootNode
 }
 
 const getChildrenOf = (db, objectId, objectsById) => {
