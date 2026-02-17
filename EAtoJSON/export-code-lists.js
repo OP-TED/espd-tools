@@ -1,4 +1,4 @@
-import { create } from 'xmlbuilder2'
+import { create, convert } from 'xmlbuilder2'
 
 const EXTERNAL_VOCABULARY_PREFIXES = ['at-voc:', 'esco:']
 
@@ -265,6 +265,32 @@ const extractEnumerations = (database) => {
   }
 }
 
+  function buildCodelistMetadata({
+    id,
+    version,
+    source
+  }) {
+    return {
+      id,
+      version,
+      source
+    }
+  }
+
+function extractVersionFromGcXml(xml) {
+  try {
+    const doc = convert(xml, { format: 'object' })
+    return (
+      doc?.['gc:CodeList']
+        ?.Identification
+        ?.Version
+        ?? null
+    )
+  } catch {
+    return null
+  }
+}
+
 // ============================================================================
 // Main Processing
 // ============================================================================
@@ -274,13 +300,25 @@ async function exportCodeLists (db) {
 
   console.log(
     `Found ${stats.totalFound} total enumerations (${stats.espdCount} ESPD, ${stats.externalCount} external from EU vocabularies).`)
+  const codelistIndex = []
 
   // Generate XML for each enumeration
   const resultsInternal = enumerationsInternal.map(enumeration => {
-    const shortName = enumeration.name.replace('espd:', '')
-    
+    const fullNameInt = enumeration.name.split(":")
+    const source = fullNameInt[0]
+    const shortName = fullNameInt[1]
     try {
       const xml = generateGcXml(enumeration)
+      const version = extractVersionFromGcXml(xml)
+
+      codelistIndex.push(
+      buildCodelistMetadata({
+        id: shortName,
+        version,
+        source
+      })
+    )
+
       return {
         kind: 'internal',
         fileName: `${shortName}.gc`,
@@ -298,36 +336,52 @@ async function exportCodeLists (db) {
     }
   })
 
- const resultsExternal = await Promise.all(
-  enumerationsExternal.map(async (enumeration) => {
-    const shortName = enumeration.name
-      .replace('at-voc:', '')
-      .replace('esco:', '')
+  const resultsExternal = await Promise.all(
+    enumerationsExternal.map(async (enumeration) => {
+      const fullNameExt  = enumeration.name.split(":")
+        // .replace('at-voc:', '')
+        // .replace('esco:', '')
+      const source = fullNameExt[0]
+      const shortName = fullNameExt[1]
+      try {
+        const xml = await downloadGcXml(enumeration)
+        const version = extractVersionFromGcXml(xml)
 
-    try {
-      const xml = await downloadGcXml(enumeration)
-
-      return {
-        kind: 'external',
-        fileName: `${shortName}.gc`,
-        content: xml,
-        success: true
+      codelistIndex.push(
+        buildCodelistMetadata({
+          id: shortName,
+          version,
+          source
+        })
+      )
+        
+        return {
+          kind: 'external',
+          fileName: `${shortName}.gc`,
+          content: xml,
+          success: true
+        }
+      } catch (error) {
+        return {
+          kind: 'external',
+          fileName: `${shortName}.gc`,
+          error: error.message,
+          success: false
+        }
       }
-    } catch (error) {
-      return {
-        kind: 'external',
-        fileName: `${shortName}.gc`,
-        error: error.message,
-        success: false
-      }
-    }
-  })
-)
+    })
+  )
 
+  const codelistMetadataFile = {
+  ublVersion: '2.4',
+  espdVersion: '5.0.0-alpha.2',
+  codelists: codelistIndex
+}
 
   return {
     internal: resultsInternal,
     external: resultsExternal,
+    codelistMetadata: codelistMetadataFile,
     stats: {
       ...stats,
       internal: {

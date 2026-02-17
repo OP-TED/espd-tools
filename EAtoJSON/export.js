@@ -50,19 +50,54 @@ program
   .action(async ({ args, options }) => {
     log(chalk.bold('\n=== Exporting Code Lists ==='))
     const db = loadDatabase(args.eafile)
-    const { results, stats } = await exportCodeLists(db)
+    // const { results, stats } = await exportCodeLists(db)
 
-    if (!fs.existsSync(options.output)) fs.mkdirSync(options.output, { recursive: true })
+    // if (!fs.existsSync(options.output)) fs.mkdirSync(options.output, { recursive: true })
 
-    results.forEach(result => {
-      if (result.success) {
-        const filePath = path.join(options.output, result.fileName)
-        fs.writeFileSync(filePath, result.content, 'utf-8')
-        log(chalk.green(`✓ Generated ${result.fileName} (${result.valueCount} values)`))
-      } else {
-        log(chalk.red(`✗ Failed to generate ${result.fileName}: ${result.error}`))
-      }
-    })
+    // results.forEach(result => {
+    //   if (result.success) {
+    //     const filePath = path.join(options.output, result.fileName)
+    //     fs.writeFileSync(filePath, result.content, 'utf-8')
+    //     log(chalk.green(`✓ Generated ${result.fileName} (${result.valueCount} values)`))
+    //   } else {
+    //     log(chalk.red(`✗ Failed to generate ${result.fileName}: ${result.error}`))
+    //   }
+    // })
+
+    const { internal, external, codelistMetadata, stats } = await exportCodeLists(db)
+    const codeListsDir = path.join(options.output, 'code-lists')
+    if (!fs.existsSync(codeListsDir)) fs.mkdirSync(codeListsDir, { recursive: true })
+
+    internal.forEach(result => {
+        if (result.success) {
+          const filePath = path.join(codeListsDir, result.fileName)
+          fs.writeFileSync(filePath, result.content, 'utf-8')
+          log(chalk.green(`✓ Generated ${result.fileName} (${result.valueCount} values)`))
+        } else {
+          log(chalk.red(`✗ Failed to generate ${result.fileName}: ${result.error}`))
+        }
+      })
+
+    external.forEach(result => {
+        if (result.success) {
+          const filePath = path.join(codeListsDir, result.fileName)
+          fs.writeFileSync(filePath, result.content, 'utf-8')
+          log(chalk.green(`✓ Downloaded ${result.fileName}`))
+        } else {
+          log(chalk.red(`✗ Failed to download ${result.fileName}: ${result.error}`))
+        }
+      })
+
+    const metadataFilePath = path.join(
+      codeListsDir,
+      'codelists.json'
+    )
+
+    fs.writeFileSync(
+      metadataFilePath,
+      JSON.stringify(codelistMetadata, null, 2),
+      'utf-8'
+    )
 
     log(chalk.bold(`\n${stats.successful}/${stats.total} files written to ${options.output}`))
     if (stats.failed > 0) log(chalk.yellow(`⚠ ${stats.failed} code list(s) failed`))
@@ -85,7 +120,7 @@ program
 
     // Code lists
     log(chalk.bold('\n--- Code Lists ---'))
-    const { internal, external, stats } = await exportCodeLists(db)
+    const { internal, external,codelistMetadata, stats } = await exportCodeLists(db)
     const codeListsDir = path.join(options.output, 'code-lists')
     if (!fs.existsSync(codeListsDir)) fs.mkdirSync(codeListsDir, { recursive: true })
 
@@ -98,6 +133,7 @@ program
         log(chalk.red(`✗ Failed to generate ${result.fileName}: ${result.error}`))
       }
     })
+
     external.forEach(result => {
       if (result.success) {
         const filePath = path.join(codeListsDir, result.fileName)
@@ -107,6 +143,19 @@ program
         log(chalk.red(`✗ Failed to download ${result.fileName}: ${result.error}`))
       }
     })
+
+    const metadataFilePath = path.join(
+    codeListsDir,
+    'codelists.json'
+  )
+
+  fs.writeFileSync(
+    metadataFilePath,
+    JSON.stringify(codelistMetadata, null, 2),
+    'utf-8'
+  )
+
+log(chalk.green(`✓ Generated codelist metadata (codelists.json)`))
     // Summary
     log(chalk.bold('\n=== Summary ==='))
     log(`Criteria: exported to ${criteriaFile}`)
