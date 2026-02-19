@@ -401,16 +401,22 @@ const createRootCriterion = (rootNode, code) => {
 }
 
 const buildEDMTree = (db, rootNode, packageElements, code, orderMap) => {
+  // TODO: Revert this for version 5.0.0 before final release
+  // This is until UBL version 2.5 is finalized
+  const criterion = createRootCriterion(rootNode, code)
+  if(packageElements === null) {
+    return criterion
+  }
+  // Remove the above
+  const counters = {}
+
   // Create lookup map for efficiency
   const objectsById = new Map(
     packageElements.map(elem => [elem.Object_ID, elem]),
   )
 
-  const criterion = createRootCriterion(rootNode, code)
-  const counters = {}
-
   // Process all children
-const rawChildren = getChildrenOf(db, rootNode.Object_ID, objectsById)
+  const rawChildren = getChildrenOf(db, rootNode.Object_ID, objectsById)
 
   const children = orderChildren({
     children: rawChildren,
@@ -458,9 +464,15 @@ const exportPackage = (db, packageCode, orderMap = null) => {
   if (!rootNode) {
     throw new Error('No root node found in package')
   }
-
-  const criterion = buildEDMTree(db, rootNode, enrichedElements, code, orderMap)
-
+  var criterion
+  // TODO: Revert this for version 5.0.0 before final release
+  // Remove this if-else statement
+  if(code.startsWith("AI")){
+    criterion = buildEDMTree(db, rootNode, null, code, orderMap)
+  } else {
+    criterion = buildEDMTree(db, rootNode, enrichedElements, code, orderMap)
+  }
+  // Remove the above
   return criterion
 }
 
