@@ -277,15 +277,24 @@ const extractEnumerations = (database) => {
     }
   }
 
-function extractVersionFromGcXml(xml) {
+function extractFromGcXml(xml, property) {
   try {
     const doc = convert(xml, { format: 'object' })
-    return (
+    if(property === "Version") {
+      return (
+        doc?.['gc:CodeList']
+          ?.Identification
+          ?.Version
+          ?? null
+      )
+    } else if (property === "ShortName") {
+      return (
       doc?.['gc:CodeList']
         ?.Identification
-        ?.Version
+        ?.ShortName
         ?? null
-    )
+      )
+    }
   } catch {
     return null
   }
@@ -309,7 +318,8 @@ async function exportCodeLists (db) {
     const shortName = fullNameInt[1]
     try {
       const xml = generateGcXml(enumeration)
-      const version = extractVersionFromGcXml(xml)
+      const version = extractFromGcXml(xml, "Version")
+
 
       codelistIndex.push(
       buildCodelistMetadata({
@@ -342,11 +352,11 @@ async function exportCodeLists (db) {
         // .replace('at-voc:', '')
         // .replace('esco:', '')
       const source = fullNameExt[0]
-      const shortName = fullNameExt[1]
+      var shortName = fullNameExt[1]
       try {
         const xml = await downloadGcXml(enumeration)
-        const version = extractVersionFromGcXml(xml)
-
+        const version = extractFromGcXml(xml, "Version")
+        shortName = extractFromGcXml(xml, "ShortName") || shortName
       codelistIndex.push(
         buildCodelistMetadata({
           id: shortName,
