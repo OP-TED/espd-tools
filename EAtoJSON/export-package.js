@@ -437,6 +437,23 @@ const buildEDMTree = (db, rootNode, packageElements, code, orderMap) => {
   return criterion
 }
 
+function toArrayComponents(node) {
+  if (!node || typeof node !== 'object') return node
+
+  // If node has components as an object map, convert to array
+  if (node.components && !Array.isArray(node.components) && typeof node.components === 'object') {
+    const entries = Object.entries(node.components)
+
+    node.components = entries.map(([tag, child]) => {
+      const childNode = { tag,...child }
+      return toArrayComponents(childNode)
+    })
+  } else if (Array.isArray(node.components)) {
+    node.components = node.components.map(c => toArrayComponents(c))
+  }
+
+  return node
+}
 // ============================================
 // Main Export Function
 // ============================================
@@ -473,7 +490,7 @@ const exportPackage = (db, packageCode, orderMap = null) => {
     criterion = buildEDMTree(db, rootNode, enrichedElements, code, orderMap)
   }
   // Remove the above
-  return criterion
+  return toArrayComponents(criterion)
 }
 
 export { exportPackage }
