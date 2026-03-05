@@ -1,7 +1,7 @@
 import { exportPackage } from './export-package.js'
 
 function exportCriteria (db) {
-  const result = {}
+  const result = []
 
   // Collect all structure attributes
   const structureAttrs = db.attributes.filter(
@@ -39,9 +39,10 @@ function exportCriteria (db) {
   )
 
   // Export criteria in the correct order
-  criterionOrder.forEach(code => {
-    result[code] = exportPackage(db, code, orderMap)
-  })
+  for (const code of criterionOrder) {
+    //if (typeof code !== 'string' || !code.trim()) continue
+    result.push(exportPackage(db, code.trim(), orderMap))
+  }
 
   return result
 }
@@ -53,7 +54,14 @@ function extractCriterionOrderFromParts(structure) {
 
   Object.values(structure).forEach(part => {
     Object.values(part).forEach(group => {
-      order.push(...group)
+      if (!Array.isArray(group)) return
+
+      // IMPORTANT: EA arrays can be sparse; ignore holes/undefined
+      for (const code of group) {
+        if (typeof code === 'string' && code.trim()) {
+          order.push(code.trim())
+        }
+      }
     })
   })
 
