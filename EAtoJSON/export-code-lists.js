@@ -57,20 +57,24 @@ const transformEnumeration = (attributes, objectProperties) => (enumObj) => {
   const canonicalVersionUriProp = objectProperties.find(p =>
   p.Object_ID === enumObj.Object_ID && p.Property == 'CanonicalVersionUri')
 
-
   const versionProp = objectProperties.find(p =>
   p.Object_ID === enumObj.Object_ID && p.Property == 'Version')
+
+  const longNameProp = objectProperties.find(p =>
+  p.Object_ID === enumObj.Object_ID && p.Property == 'LongName')
 
   const locationUri = locationUriProp?.Value ?? null
   const canonicalUri = canonicalUriProp?.Value ?? null
   const canonicalVersionUri = canonicalVersionUriProp?.Value ?? null
   const version = versionProp?.Value ?? null
+  const longName = longNameProp?.Value ?? null
 
   const enumValues = attributes.filter(isEnumerationValue(enumObj.Object_ID))
   .map(transformEnumerationValue)
 
   return {
     name: enumObj.Name,
+    longName: longName,
     objectId: enumObj.Object_ID,
     packageId: enumObj.Package_ID,
     eaGuid: enumObj.ea_guid,
@@ -91,6 +95,7 @@ const transformEnumeration = (attributes, objectProperties) => (enumObj) => {
 
 const generateGcXml = (enumeration) => {
   const shortName = enumeration.name.replace('espd:', '')
+  const longName = enumeration.longName || shortName
   const listId = shortName.replace(/([A-Z])/g, '-$1').toLowerCase().substring(1)
 
   // Build the document
@@ -101,8 +106,7 @@ const generateGcXml = (enumeration) => {
   // Identification section
   const identification = root.ele('Identification')
   identification.ele('ShortName').txt(shortName)
-  identification.ele('LongName').txt(shortName)
-  identification.ele('LongName', { 'Identifier': 'listId' }).txt(listId)
+  identification.ele('LongName').txt(longName)
   identification.ele('Version').txt(enumeration.version)
   identification.ele('CanonicalUri').txt(enumeration.canonicalUri)
   identification.ele('CanonicalVersionUri').txt(enumeration.canonicalVersionUri)
@@ -316,6 +320,7 @@ async function exportCodeLists (db) {
     const fullNameInt = enumeration.name.split(":")
     const source = fullNameInt[0]
     const shortName = fullNameInt[1]
+    const longName = enumeration.longName
     try {
       const xml = generateGcXml(enumeration)
       const version = extractFromGcXml(xml, "Version")
