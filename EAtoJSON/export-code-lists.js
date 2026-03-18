@@ -88,16 +88,14 @@ const transformEnumeration = (attributes, objectProperties) => (enumObj) => {
     version: version
   }
 }
-
 // ============================================================================
 // XML Generation
 // ============================================================================
 
 const generateGcXml = (enumeration) => {
   const shortName = enumeration.name.replace('espd:', '')
-  const longName = enumeration.longName || shortName
-  const listId = shortName.replace(/([A-Z])/g, '-$1').toLowerCase().substring(1)
-
+  const longName = enumeration.longName
+const listId = longName.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/([A-Z])/g, '-$1').toLowerCase().replace(/^-/, '')
   // Build the document
   const root = create({ version: '1.0', encoding: 'UTF-8' }).
     ele('gc:CodeList',
@@ -106,7 +104,8 @@ const generateGcXml = (enumeration) => {
   // Identification section
   const identification = root.ele('Identification')
   identification.ele('ShortName').txt(shortName)
-  identification.ele('LongName').txt(longName)
+  identification.ele('LongName').txt(shortName)
+  identification.ele('LongName', { 'Identifier': 'listId' }).txt(listId)
   identification.ele('Version').txt(enumeration.version)
   identification.ele('CanonicalUri').txt(enumeration.canonicalUri)
   identification.ele('CanonicalVersionUri').txt(enumeration.canonicalVersionUri)
