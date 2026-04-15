@@ -20,7 +20,18 @@ The "Source of Truth" is the Enterprise Architect binary file (.eapx) located in
 To setup and install all necessary JavaScript libraries:
 
 ### Usage
-The tools are built using the caporal CLI framework. The main entry point is export.js.
+### Available Commands
+
+The tools use the `caporal` framework. The main entry point is `export.js`.
+
+| Command | Description | Output Location |
+| :--- | :--- | :--- |
+| `node export.js criteria` | Extracts criteria logic and structures from the EA model. | `outputs/espd-edm.json` |
+| `node export.js code-lists` | Generates internal and downloads external codelists in `.gc` format. | `outputs/code-lists/` |
+| `node export.js all` | Performs a full extraction of both criteria and codelists. | `outputs/` |
+
+Use the `--output` or `-o` flag to specify a custom destination directory.
+
 
 ### Command Options:
 Use --help for details on arguments like custom input files or output directories:
