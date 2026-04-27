@@ -1,0 +1,14 @@
+[
+  {
+    "tag": "INVALID",
+    "type": "NOT_A_CRITERION",
+    "uuid": "not-a-uuid",
+    "code": 12345,
+    "cardinality": "INVALID_CARDINALITY",
+    "name": "Invalid Example",
+    "description": "This criterion has multiple validation errors",
+    "requestpath": 999,
+    "responsepath": null,
+    "components": "not-an-array"
+  }
+]
