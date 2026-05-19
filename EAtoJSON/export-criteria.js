@@ -41,7 +41,8 @@ function exportCriteria (db) {
   // Export criteria in the correct order
   for (const code of criterionOrder) {
     //if (typeof code !== 'string' || !code.trim()) continue
-    result.push(exportPackage(db, code.trim(), orderMap))
+    const exported = exportPackage(db, code.trim(), orderMap)
+    if (exported) result.push(exported)
   }
 
   return result
