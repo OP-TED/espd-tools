@@ -10,8 +10,17 @@ import caporal from '@caporal/core';
 const { program } = caporal;
 const log = console.log;
 
+// AJV instance for validating data
 const ajv = new Ajv2020({ allErrors: true });
 addFormats(ajv);
+
+// AJV instance for validating schemas (validates against meta-schema)
+const ajvMeta = new Ajv2020({ 
+  allErrors: true, 
+  validateSchema: true,  // Enable meta-schema validation
+  strict: false 
+});
+addFormats(ajvMeta);
 
 program
   .version('1.0.0')
@@ -31,6 +40,23 @@ program
     }
     const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
     log(chalk.blue(`Loaded schema: ${options.schema}`));
+
+    // Validate the schema itself against JSON Schema spec
+    log(chalk.blue('Validating schema conformance...'));
+    
+    // Check if schema declares a $schema keyword
+    const schemaId = schema.$schema || 'https://json-schema.org/draft/2020-12/schema';
+    log(chalk.gray(`Schema declares: ${schemaId}`));
+
+    // Validate schema against its declared meta-schema
+    const schemaValid = ajvMeta.validateSchema(schema);
+    
+    if (!schemaValid) {
+      log(chalk.red('❌ Schema validation failed - schema does not conform to JSON Schema spec:'));
+      console.log(JSON.stringify(ajvMeta.errors, null, 2));
+      process.exit(1);
+    }
+    log(chalk.green('✅ Schema is valid (conforms to JSON Schema spec)'));
 
     // Load data
     const dataPath = path.resolve(args.jsonfile);
