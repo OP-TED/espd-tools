@@ -3,6 +3,7 @@
 // ============================================
 
 import { getLabels } from './fetch-labels.js'
+import chalk from 'chalk'
 
 // Configuration and Constants
 const NODE_TYPES = {
@@ -36,12 +37,13 @@ const GROUP_TYPES_FOR_ORDERING = [  'REQUIREMENT_GROUP',
 
 
 const CARDINALITY_MAP = {
-  '0..1': '1',      // Optional single -> mandatory
+  '0..1': '0..1',   // Optional single
   '1': '1',         // Mandatory single
   '1..*': '1..n',   // Mandatory multiple
   '0..*': '0..n',   // Optional multiple
 }
 
+const log = console.log
 // ============================================
 // Utility Functions
 // ============================================
@@ -54,7 +56,7 @@ const normalizeCode = (code) => {
 }
 
 const normalizeCardinality = (card) =>
-  CARDINALITY_MAP[String(card || '').trim()] || '1'
+  CARDINALITY_MAP[String(card || '').trim()] ?? undefined
 
 const getUUID = (obj) => {
   const raw = obj['cbc::ID'] || obj.ea_guid
@@ -277,7 +279,7 @@ const buildSimpleComponent = (node, parentPath) => {
 
   const component = {
     type,
-    cardinality: node._cardinality || '1',
+    ...(node._cardinality !== undefined && { cardinality: node._cardinality }),
     requestpath: currentPath,
     ...(type === 'LEGISLATION'
       ? buildLegislationFields(node)
@@ -316,9 +318,11 @@ const buildGroup = (db, objectsById, counters, orderMap) => (node, parentPath) =
 
   const currentPath = parentPath ? `${parentPath}/${label}` : label
 
+  const resolvedCardinality = node._cardinality ?? node['cardinality'] ?? undefined
+
   const group = {
     type,
-    cardinality: node['cardinality'] || '1',
+    ...(resolvedCardinality !== undefined && { cardinality: resolvedCardinality }),
     components: {},
     requestpath: currentPath,
     responsepath: currentPath,
@@ -401,12 +405,8 @@ const createRootCriterion = (rootNode, code) => {
 }
 
 const buildEDMTree = (db, rootNode, packageElements, code, orderMap) => {
-  // TODO: Revert this for version 5.0.0 before final release
   // This is until UBL version 2.5 is finalized
   const criterion = createRootCriterion(rootNode, code)
-  if(packageElements === null) {
-    return criterion
-  }
   // Remove the above
   const counters = {}
 
@@ -463,12 +463,15 @@ const exportPackage = (db, packageCode, orderMap = null) => {
   if (!code) {
     throw new Error(`Invalid package code format: ${packageCode}`)
   }
-
+  if(code === "C37"){
+    log(chalk.yellow(`\n[DEBUG C37] packageCode: ${packageCode}, normalized: ${code}`))
+  }
 
   const packageElements = getPackageElements(db, code)
 
   if (packageElements.length === 0) {
-    throw new Error(`No package found with code: ${packageCode}`)
+    log(chalk.red(`Warning: No package found with code: ${packageCode} — skipping`))
+    return null
   }
 
   // Enrich elements with attributes
@@ -481,14 +484,17 @@ const exportPackage = (db, packageCode, orderMap = null) => {
   if (!rootNode) {
     throw new Error('No root node found in package')
   }
+
+  if(code === "C37"){
+    log(chalk.yellow(`[DEBUG C37] rootNode.Name: ${rootNode.Name}`))
+    log(chalk.yellow(`[DEBUG C37] rootNode['cbc::TypeCode']: ${rootNode['cbc::TypeCode']}`))
+    log(chalk.yellow(`[DEBUG C37] extractSuffix result: ${extractSuffix(rootNode.Name)}`))
+  }
   var criterion
   // TODO: Revert this for version 5.0.0 before final release
   // Remove this if-else statement
-  if(code.startsWith("AI")){
-    criterion = buildEDMTree(db, rootNode, null, code, orderMap)
-  } else {
-    criterion = buildEDMTree(db, rootNode, enrichedElements, code, orderMap)
-  }
+  
+  criterion = buildEDMTree(db, rootNode, enrichedElements, code, orderMap)
   // Remove the above
   return toArrayComponents(criterion)
 }
