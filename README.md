@@ -29,6 +29,7 @@ The tools use the `caporal` framework. The main entry point is `export.js`.
 | `node export.js criteria` | Extracts criteria logic and structures from the EA model. | `outputs/espd-edm.json` |
 | `node export.js code-lists` | Generates internal and downloads external codelists in `.gc` format. | `outputs/code-lists/` |
 | `node export.js all` | Performs a full extraction of both criteria and codelists. | `outputs/` |
+| `node validate-criteria.js` | Validates the generated criteria file against its JSON Schema | commandline output |
 
 Use the `--output` or `-o` flag to specify a custom destination directory.
 

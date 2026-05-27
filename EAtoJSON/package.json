@@ -17,6 +17,7 @@
     },
     "scripts": {
         "clean": "rmdir /s /q node_modules",
+        "validate-criteria": "node validate-criteria.js",
         "export-criteria": "node export.js criteria",
         "export-code-lists": "node export.js code-lists",
         "export-all": "node export.js all"
