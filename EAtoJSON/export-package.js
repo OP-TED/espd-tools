@@ -27,6 +27,12 @@ const NODE_TYPES = {
   POSTAL_ADDRESS: /\/PA\d+(\r?\n)?$/,
   CONTACT: /\/CTC\d+(\r?\n)?$/,
   COUNTRY: /\/CTR\d+(\r?\n)?$/,
+  // INFORMATION: additional document reference (I68) and procurement project (I70).
+  // End-anchored to avoid ADR/ADL and PP/PPL collisions.
+  ADDITIONAL_DOCUMENT_REFERENCE: /\/ADR\d+(\r?\n)?$/,
+  ATTACHMENT: /\/ATT\d+(\r?\n)?$/,
+  PROCUREMENT_PROJECT_LOT: /\/PPL\d+(\r?\n)?$/,
+  PROCUREMENT_PROJECT: /\/PP\d+(\r?\n)?$/,
 }
 
 const GROUP_TYPES = new Set([
@@ -35,6 +41,7 @@ const GROUP_TYPES = new Set([
   'GROUP', 'SUBGROUP', 'SUBCRITERION',
   // INFORMATION container types (have nested components)
   'CONTRACTING_PARTY', 'PARTY', 'POSTAL_ADDRESS',
+  'ADDITIONAL_DOCUMENT_REFERENCE',
 ])
 const ROOT_TYPE_ORDER = [
   'CRITERION',
