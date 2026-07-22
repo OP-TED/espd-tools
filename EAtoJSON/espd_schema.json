@@ -8,7 +8,7 @@
       "enum" : ["1", "0..n", "1..n", "0..1"]
     },
     "componentType" :{
-      "enum": ["QUESTION_GROUP", "QUESTION_SUBGROUP", "REQUIREMENT_GROUP", "REQUIREMENT_SUBGROUP", "QUESTION", "REQUIREMENT", "CAPTION", "SUBCRITERION", "ADDITIONAL_DESCRIPTION_LINE", "LEGISLATION", "CRITERION"]
+      "enum": ["QUESTION_GROUP", "QUESTION_SUBGROUP", "REQUIREMENT_GROUP", "REQUIREMENT_SUBGROUP", "QUESTION", "REQUIREMENT", "CAPTION", "SUBCRITERION", "ADDITIONAL_DESCRIPTION_LINE", "LEGISLATION", "CRITERION", "CONTRACTING_PARTY", "PARTY", "POSTAL_ADDRESS", "PARTY_IDENTIFICATION", "PARTY_NAME", "CONTACT", "COUNTRY", "ADDITIONAL_DOCUMENT_REFERENCE", "ATTACHMENT", "PROCUREMENT_PROJECT", "PROCUREMENT_PROJECT_LOT"]
     },
     "legislation" : {
       "type": "object",
@@ -40,11 +40,12 @@
         },
         "name": { "type": "string" },
         "description": { "type": "string" },
+        "title": { "type": "string" },
         "propertydatatype": { "type": "string" },
         "sellervalue": { "type": "string" },
         "buyervalue": { "type": "string" }
       },
-      "required": [ "tag", "type", "cardinality", "requestpath", "responsepath" ]
+      "required": [ "tag", "type", "requestpath", "responsepath" ]
     },
     "criterion": {
       "type": "object",
@@ -65,6 +66,25 @@
       },
       "required": [ "tag", "type", "uuid", "code", "cardinality", "components", "name", "requestpath", "responsepath" ]
     },
+    "information": {
+      "type": "object",
+      "properties": {
+        "tag": { "type": "string" },
+        "type": { "enum": ["INFORMATION"] },
+        "uuid": { "type": "string" },
+        "code": { "type": "string" },
+        "cardinality": { "$ref" : "#/$defs/cardinalityType" },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/componentItem" }
+        },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "requestpath": { "type": "string" },
+        "responsepath": { "type": "string" }
+      },
+      "required": [ "tag", "type", "cardinality", "components", "name", "requestpath", "responsepath" ]
+    },
     "additionalInformation": {
       "type": "object",
       "properties": {
@@ -82,13 +102,37 @@
         "responsepath": { "type": "string" }
       },
       "required": [ "tag", "type", "cardinality", "components", "name", "requestpath", "responsepath" ]
+    },
+    "criterionItem": {
+      "oneOf": [
+        { "$ref": "#/$defs/criterion" },
+        { "$ref": "#/$defs/information" },
+        { "$ref": "#/$defs/additionalInformation" }
+      ]
+    },
+    "section": {
+      "type": "object",
+      "properties": {
+        "section": { "type": "string" },
+        "criteria": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/criterionItem" }
+        }
+      },
+      "required": [ "section", "criteria" ]
+    },
+    "part": {
+      "type": "object",
+      "properties": {
+        "part": { "type": "string" },
+        "sections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/section" }
+        }
+      },
+      "required": [ "part", "sections" ]
     }
   },
   "type": "array",
-  "items": {
-    "oneOf": [
-      { "$ref": "#/$defs/criterion" },
-      { "$ref": "#/$defs/additionalInformation" }
-    ]
-  }
+  "items": { "$ref": "#/$defs/part" }
 }

@@ -410,7 +410,6 @@ async function exportCodeLists (db) {
           success: true
         }
       } catch (error) {
-        console.error(error)
         return {
           kind: 'external',
           fileName: `${shortName}.gc`,
