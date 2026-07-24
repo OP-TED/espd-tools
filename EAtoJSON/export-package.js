@@ -33,6 +33,11 @@ const NODE_TYPES = {
   ATTACHMENT: /\/ATT\d+(\r?\n)?$/,
   PROCUREMENT_PROJECT_LOT: /\/PPL\d+(\r?\n)?$/,
   PROCUREMENT_PROJECT: /\/PP\d+(\r?\n)?$/,
+  // INFORMATION: economic operator party (I71) and power of attorney (I72).
+  // End-anchored to avoid QP/QG, POA/PA and EOP/EO collisions.
+  ECONOMIC_OPERATOR_PARTY: /\/EOP\d+(\r?\n)?$/,
+  QUALIFYING_PARTY: /\/QP\d+(\r?\n)?$/,
+  POWER_OF_ATTORNEY: /\/POA\d+(\r?\n)?$/,
 }
 
 const GROUP_TYPES = new Set([
@@ -42,6 +47,7 @@ const GROUP_TYPES = new Set([
   // INFORMATION container types (have nested components)
   'CONTRACTING_PARTY', 'PARTY', 'POSTAL_ADDRESS',
   'ADDITIONAL_DOCUMENT_REFERENCE',
+  'ECONOMIC_OPERATOR_PARTY', 'QUALIFYING_PARTY', 'POWER_OF_ATTORNEY',
 ])
 const ROOT_TYPE_ORDER = [
   'CRITERION',
