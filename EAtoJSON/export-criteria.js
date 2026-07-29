@@ -23,7 +23,6 @@ function exportCriteria (db) {
   }
 
   const criterionStructure = JSON.parse(criterionStructureAttr.Default)
-  const criterionOrder = extractCriterionOrderFromParts(criterionStructure)
 
   // Build ONE global orderMap from ALL tree-based structures
   const orderMap = buildGlobalOrderMap(
@@ -38,36 +37,33 @@ function exportCriteria (db) {
       .filter(s => s?.tree)
   )
 
-  // Export criteria in the correct order
-  for (const code of criterionOrder) {
-    //if (typeof code !== 'string' || !code.trim()) continue
-    const exported = exportPackage(db, code.trim(), orderMap)
-    if (exported) result.push(exported)
+  // Export criteria grouped by Part and Section, preserving order:
+  // [ { part, sections: [ { section, criteria: [ <criterion> ] } ] } ]
+  for (const [partKey, sections] of Object.entries(criterionStructure)) {
+    const partEntry = { part: partKey, sections: [] }
+
+    for (const [sectionKey, codes] of Object.entries(sections)) {
+      if (!Array.isArray(codes)) continue
+
+      const sectionEntry = { section: sectionKey, criteria: [] }
+
+      // IMPORTANT: EA arrays can be sparse; ignore holes/undefined
+      for (const code of codes) {
+        if (typeof code !== 'string' || !code.trim()) continue
+        const exported = exportPackage(db, code.trim(), orderMap)
+        if (exported) sectionEntry.criteria.push(exported)
+      }
+
+      partEntry.sections.push(sectionEntry)
+    }
+
+    result.push(partEntry)
   }
 
   return result
 }
 
 /* ---------------- helpers ---------------- */
-
-function extractCriterionOrderFromParts(structure) {
-  const order = []
-
-  Object.values(structure).forEach(part => {
-    Object.values(part).forEach(group => {
-      if (!Array.isArray(group)) return
-
-      // IMPORTANT: EA arrays can be sparse; ignore holes/undefined
-      for (const code of group) {
-        if (typeof code === 'string' && code.trim()) {
-          order.push(code.trim())
-        }
-      }
-    })
-  })
-
-  return order
-}
 
 function buildGlobalOrderMap(structures) {
   const orderMap = {}

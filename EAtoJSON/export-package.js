@@ -17,12 +17,37 @@ const NODE_TYPES = {
   QUESTION_GROUP: '/QG',
   REQUIREMENT_SUBGROUP: '/RSG',
   REQUIREMENT_GROUP: '/RG',
+  // INFORMATION structures (e.g. Part I contracting body).
+  // Anchored to the end of the label so nested paths don't collide
+  // (e.g. ".../PAR1" must not match POSTAL_ADDRESS "/PA").
+  CONTRACTING_PARTY: /\/CP\d+(\r?\n)?$/,
+  PARTY: /\/PAR\d+(\r?\n)?$/,
+  PARTY_IDENTIFICATION: /\/PI\d+(\r?\n)?$/,
+  PARTY_NAME: /\/PN\d+(\r?\n)?$/,
+  POSTAL_ADDRESS: /\/PA\d+(\r?\n)?$/,
+  CONTACT: /\/CTC\d+(\r?\n)?$/,
+  COUNTRY: /\/CTR\d+(\r?\n)?$/,
+  // INFORMATION: additional document reference (I68) and procurement project (I70).
+  // End-anchored to avoid ADR/ADL and PP/PPL collisions.
+  ADDITIONAL_DOCUMENT_REFERENCE: /\/ADR\d+(\r?\n)?$/,
+  ATTACHMENT: /\/ATT\d+(\r?\n)?$/,
+  PROCUREMENT_PROJECT_LOT: /\/PPL\d+(\r?\n)?$/,
+  PROCUREMENT_PROJECT: /\/PP\d+(\r?\n)?$/,
+  // INFORMATION: economic operator party (I71) and power of attorney (I72).
+  // End-anchored to avoid QP/QG, POA/PA and EOP/EO collisions.
+  ECONOMIC_OPERATOR_PARTY: /\/EOP\d+(\r?\n)?$/,
+  QUALIFYING_PARTY: /\/QP\d+(\r?\n)?$/,
+  POWER_OF_ATTORNEY: /\/POA\d+(\r?\n)?$/,
 }
 
 const GROUP_TYPES = new Set([
   'QUESTION_GROUP', 'QUESTION_SUBGROUP',
   'REQUIREMENT_GROUP', 'REQUIREMENT_SUBGROUP',
   'GROUP', 'SUBGROUP', 'SUBCRITERION',
+  // INFORMATION container types (have nested components)
+  'CONTRACTING_PARTY', 'PARTY', 'POSTAL_ADDRESS',
+  'ADDITIONAL_DOCUMENT_REFERENCE',
+  'ECONOMIC_OPERATOR_PARTY', 'QUALIFYING_PARTY', 'POWER_OF_ATTORNEY',
 ])
 const ROOT_TYPE_ORDER = [
   'CRITERION',
@@ -376,11 +401,8 @@ const createRootCriterion = (rootNode, code) => {
   let type = 'CRITERION'
   let tag = code
 
-  if (code.startsWith('AI')) {
-    type = 'ADDITIONAL_INFORMATION'
-    tag = `${code}`
-  } else if (code.startsWith('C')) {
-    tag = `${code}`
+  if (code.startsWith('I')) {
+    type = 'INFORMATION'
   }
 
   // Extract typeCode from TypeCode field or Name suffix
