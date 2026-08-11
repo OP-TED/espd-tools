@@ -51,6 +51,21 @@ function escapeQuotes (str) {
   return (str || '').replace(/"/g, '\\"')
 }
 
+/**
+ * Sanitize a string for use inside PlantUML class bodies.
+ * Replaces characters that break PlantUML parsing:
+ *   :: → .  (namespace separator conflicts)
+ *   /  → .  (path separators confuse the parser)
+ *   newlines → stripped
+ */
+function sanitize (str) {
+  return (str || '')
+    .replace(/::/g, '.')
+    .replace(/\//g, '.')
+    .replace(/\r?\n/g, ' ')
+    .trim()
+}
+
 function buildPackageTree (packages) {
   const byId = new Map()
   packages.forEach(pkg => byId.set(pkg.Package_ID, pkg))
@@ -89,17 +104,19 @@ function elementToPlantUML (element, attributes, methods) {
   const elAttrs = attributes.filter(a => a.Object_ID === element.Object_ID)
   for (const attr of elAttrs) {
     const vis = VISIBILITY_MAP[attr.Scope || 'Public'] || '+'
-    const type = attr.Type ? ` : ${attr.Type}` : ''
-    const defaultVal = attr.Default ? ` = ${attr.Default}` : ''
-    lines.push(`    ${vis}${attr.Name}${type}${defaultVal}`)
+    const type = attr.Type ? ` : ${sanitize(attr.Type)}` : ''
+    const defaultVal = attr.Default ? ` = ${sanitize(attr.Default)}` : ''
+    const name = sanitize(attr.Name)
+    lines.push(`    ${vis}${name}${type}${defaultVal}`)
   }
 
   // Methods / operations
   const elMethods = methods.filter(m => m.Object_ID === element.Object_ID)
   for (const method of elMethods) {
     const vis = VISIBILITY_MAP[method.Scope || 'Public'] || '+'
-    const ret = method.Type ? ` : ${method.Type}` : ''
-    lines.push(`    ${vis}${method.Name}()${ret}`)
+    const ret = method.Type ? ` : ${sanitize(method.Type)}` : ''
+    const name = sanitize(method.Name)
+    lines.push(`    ${vis}${name}()${ret}`)
   }
 
   lines.push('}')
@@ -151,9 +168,9 @@ function packageToPlantUML (pkg, db) {
     }
   }
 
-  // Connectors
+  // Connectors — only include where BOTH ends are in this package
   const connectors = db.connectors.filter(
-    c => elementIds.has(c.Start_Object_ID) || elementIds.has(c.End_Object_ID)
+    c => elementIds.has(c.Start_Object_ID) && elementIds.has(c.End_Object_ID)
   )
 
   const seen = new Set()
