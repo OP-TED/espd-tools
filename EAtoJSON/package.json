@@ -17,6 +17,7 @@
     },
     "scripts": {
         "clean": "rmdir /s /q node_modules",
+        "validate-criteria": "node validate-criteria.js",
         "export-criteria": "node export.js criteria",
         "export-code-lists": "node export.js code-lists",
         "export-all": "node export.js all"
@@ -25,14 +26,17 @@
         "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
     },
     "dependencies": {
-        "@fastify/static": "^6.12.*",
-        "axios": "^1.7.5",
-        "https-proxy-agent": "^7.0.5",
         "@caporal/core": "^2.0.7",
+        "@fastify/static": "^6.12.*",
+        "ajv": "^8.20.0",
+        "ajv-formats": "^3.0.1",
+        "axios": "^1.7.5",
         "chalk": "4.1.2",
         "fastify": "^4.25.2",
+        "http-proxy-agent": "^7.0.0",
+        "https-proxy-agent": "^7.0.5",
+        "mdb-reader": "^3.0.0",
         "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-        "xmlbuilder2": "3.1.1",
-        "mdb-reader": "^3.0.0"
+        "xmlbuilder2": "3.1.1"
     }
 }

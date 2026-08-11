@@ -1,4 +1,7 @@
+import axios from 'axios'
 import { create, convert } from 'xmlbuilder2'
+import { HttpsProxyAgent } from 'https-proxy-agent'
+import { HttpProxyAgent } from 'http-proxy-agent'
 
 const EXTERNAL_VOCABULARY_PREFIXES = ['at-voc:', 'esco:']
 
@@ -200,6 +203,26 @@ const listId = longName.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/([A-Z])/g, 
 // ============================================================================
 const USER_AGENT = 'OP-SDK-codelist-update'
 
+// Initialize proxy agent based on environment variables
+function getProxyAgent(url) {
+  const proxyUrl = url.startsWith('https')
+    ? process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy
+    : process.env.HTTP_PROXY || process.env.http_proxy || process.env.HTTPS_PROXY || process.env.https_proxy
+    if (!proxyUrl) {
+      return { agent: undefined, proxyUrl }
+    }
+    
+    try {
+      const agent = url.startsWith('https')
+      ? new HttpsProxyAgent(proxyUrl)
+      : new HttpProxyAgent(proxyUrl)
+      return { agent, proxyUrl }
+    } catch (error) {
+      console.warn(`Warning: Failed to initialize proxy agent: ${error.message}`)
+      return { agent: undefined, proxyUrl }
+    }
+}
+
 async function downloadGcXml(enumeration) {
   const url = enumeration.locationUri
   if (!url) {
@@ -212,8 +235,9 @@ async function downloadGcXml(enumeration) {
       `"${enumeration.name}" has been replaced by selection-criterion and exclusion ground.`
     )
   }
-  const response = await fetch(url, {
-    method: 'GET',
+  
+  const { agent, proxyUrl } = getProxyAgent(url)
+  const fetchOptions = {
     headers: {
       'User-Agent': USER_AGENT,
       'Accept':
@@ -223,16 +247,26 @@ async function downloadGcXml(enumeration) {
       'Referer': 'https://github.com/OP-TED/eForms-SDK',
       'Origin': 'https://github.com/OP-TED/eForms-SDK',
     },
-    redirect: 'follow',
-  })
+    timeout: 30000,
+    maxRedirects: 5,
+    responseType: 'text'
+  }
+  
+  if (agent) {
+    fetchOptions.httpAgent = agent
+    fetchOptions.httpsAgent = agent
+    fetchOptions.proxy = false
+  }
 
-  if (!response.ok) {
+  const response = await axios.get(url, fetchOptions)
+
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(
-      `Cannot download ${url} (HTTP ${response.status} ${response.statusText})`
+      `Cannot download ${url} (HTTP ${response.status} ${response.statusText || response.status})`
     )
   }
 
-  return await response.text()
+  return response.data
 }
 
 // ============================================================================

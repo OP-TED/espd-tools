@@ -5,94 +5,134 @@
   "description": "ESPD EDM JSON validation schema",
   "$defs": {
     "cardinalityType": {
-      "enum" : ["1", "0..n", "1..n"]
+      "enum" : ["1", "0..n", "1..n", "0..1"]
     },
     "componentType" :{
-      "enum": ["QUESTION_GROUP", "QUESTION_SUBGROUP", "REQUIREMENT_GROUP", "REQUIREMENT_SUBGROUP", "QUESTION", "REQUIREMENT", "CAPTION", "SUBCRITERION", "ADDITIONAL_DESCRIPTION_LINE"]
+      "enum": ["QUESTION_GROUP", "QUESTION_SUBGROUP", "REQUIREMENT_GROUP", "REQUIREMENT_SUBGROUP", "QUESTION", "REQUIREMENT", "CAPTION", "SUBCRITERION", "ADDITIONAL_DESCRIPTION_LINE", "LEGISLATION", "CRITERION", "CONTRACTING_PARTY", "PARTY", "POSTAL_ADDRESS", "PARTY_IDENTIFICATION", "PARTY_NAME", "CONTACT", "COUNTRY", "ADDITIONAL_DOCUMENT_REFERENCE", "ATTACHMENT", "PROCUREMENT_PROJECT", "PROCUREMENT_PROJECT_LOT", "ECONOMIC_OPERATOR_PARTY", "QUALIFYING_PARTY", "POWER_OF_ATTORNEY"]
     },
     "legislation" : {
       "type": "object",
       "properties": {
+        "tag": { "type": "string" },
         "type": { "enum": ["LEGISLATION"] },
         "cardinality": { "$ref" : "#/$defs/cardinalityType" },
         "requestpath": { "type":"string" },
         "responsepath": { "type": "string" },
         "title": { "type": "string" },
-        "description": { "type": "string" },
-        "jurisdictionlevelcode" : { "type": "string" },
-        "article" : { "type": "string" },
-        "uri" : { "type": "string" }
+        "description": { "type": "string" }
       },
-      "required": [ "type", "cardinality", "requestpath", "title", "description"  ]
+      "required": [ "tag", "type", "cardinality", "requestpath", "responsepath", "title" ]
     },
-    "components" : {
+    "componentItem": {
       "type": "object",
-
-      "patternProperties":{
-        "^L\\d+$":{
-          "$ref" : "#/$defs/legislation"
+      "properties": {
+        "tag": { "type": "string" },
+        "type": { "$ref": "#/$defs/componentType" },
+        "cardinality": { "$ref" : "#/$defs/cardinalityType" },
+        "code": { "type": "string"},
+        "codelist": { "type": "string" },
+        "requestpath": { "type":"string" },
+        "responsepath": { "type": "string" },
+        "contentpath": { "type": "string" },
+        "components": { 
+          "type": "array",
+          "items": { "$ref": "#/$defs/componentItem" }
         },
-        "^(?!L\\d)$":{
-          "type": "object",
-          "properties":{
-            "type": { "$ref": "#/$defs/componentType" },
-            "cardinality": { "$ref" : "#/$defs/cardinalityType" },
-            "code": { "type": "string"},
-            "codelist": { "type": "string" },
-            "requestpath": { "type":"string" },
-            "responsepath": { "type": "string" },
-            "tag": { "type": "string" },
-            "components" : { "$ref": "#/$defs/components" },
-            "name": { "type": "string" },
-            "description": { "type": "string" },
-            "propertydatatype": { "type": "string" },
-            "sellervalue": { "type": "string" },
-            "buyervalue": { "type": "string" }
-          },
-          "required": [ "type", "cardinality" ]
-        }
-      }
-    }
-  },
-  "type": "object",
-  "patternProperties": {
-    "^C\\d+$": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "title": { "type": "string" },
+        "propertydatatype": { "type": "string" },
+        "sellervalue": { "type": "string" },
+        "buyervalue": { "type": "string" }
+      },
+      "required": [ "tag", "type", "requestpath", "responsepath" ]
+    },
+    "criterion": {
       "type": "object",
       "properties": {
         "tag": { "type": "string" },
         "type": { "enum": ["CRITERION"] },
         "uuid": { "type": "string" },
         "code": { "type": "string" },
-        "cardinality": { "$ref" : "#/$defs/cardinalityType"  },
+        "cardinality": { "$ref" : "#/$defs/cardinalityType" },
         "components": { 
-          "type": "object",  
-          "$ref": "#/$defs/components"
+          "type": "array",  
+          "items": { "$ref": "#/$defs/componentItem" }
         },
         "name": { "type": "string" },
         "description": { "type": "string" },
         "requestpath": { "type": "string" },
         "responsepath": { "type": "string" }
       },
-      "required": [ "tag", "type", "uuid", "code", "cardinality", "components" ]
+      "required": [ "tag", "type", "uuid", "code", "cardinality", "components", "name", "requestpath", "responsepath" ]
     },
-    "^AI\\d+$": {
+    "information": {
+      "type": "object",
+      "properties": {
+        "tag": { "type": "string" },
+        "type": { "enum": ["INFORMATION"] },
+        "uuid": { "type": "string" },
+        "code": { "type": "string" },
+        "cardinality": { "$ref" : "#/$defs/cardinalityType" },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/componentItem" }
+        },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "requestpath": { "type": "string" },
+        "responsepath": { "type": "string" }
+      },
+      "required": [ "tag", "type", "cardinality", "components", "name", "requestpath", "responsepath" ]
+    },
+    "additionalInformation": {
       "type": "object",
       "properties": {
         "tag": { "type": "string" },
         "type": { "enum": ["ADDITIONAL_INFORMATION"] },
         "code": { "type": "string" },
-        "cardinality": { "$ref" : "#/$defs/cardinalityType"  },
+        "cardinality": { "$ref" : "#/$defs/cardinalityType" },
         "components": {
-          "type": "object",
-          "$ref": "#/$defs/components"
+          "type": "array",
+          "items": { "$ref": "#/$defs/componentItem" }
         },
         "name": { "type": "string" },
         "description": { "type": "string" },
         "requestpath": { "type": "string" },
         "responsepath": { "type": "string" }
       },
-      "required": [  "type", "cardinality", "components", "name", "description" ]
+      "required": [ "tag", "type", "cardinality", "components", "name", "requestpath", "responsepath" ]
+    },
+    "criterionItem": {
+      "oneOf": [
+        { "$ref": "#/$defs/criterion" },
+        { "$ref": "#/$defs/information" },
+        { "$ref": "#/$defs/additionalInformation" }
+      ]
+    },
+    "section": {
+      "type": "object",
+      "properties": {
+        "section": { "type": "string" },
+        "criteria": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/criterionItem" }
+        }
+      },
+      "required": [ "section", "criteria" ]
+    },
+    "part": {
+      "type": "object",
+      "properties": {
+        "part": { "type": "string" },
+        "sections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/section" }
+        }
+      },
+      "required": [ "part", "sections" ]
     }
   },
-  "additionalProperties": false
+  "type": "array",
+  "items": { "$ref": "#/$defs/part" }
 }
