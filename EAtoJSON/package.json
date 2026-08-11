@@ -20,7 +20,11 @@
         "validate-criteria": "node validate-criteria.js",
         "export-criteria": "node export.js criteria",
         "export-code-lists": "node export.js code-lists",
-        "export-all": "node export.js all"
+        "export-all": "node export.js all",
+        "export-plantuml": "node export.js plantuml",
+        "import-plantuml": "node export.js plantuml-import",
+        "import-plantuml-dry": "node export.js plantuml-import --dry-run",
+        "import-plantuml-apply": "node export.js plantuml-import --apply"
     },
     "overrides": {
         "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"

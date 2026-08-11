@@ -7,6 +7,9 @@ import chalk from 'chalk'
 import caporal from '@caporal/core'
 import { exportCriteria } from './export-criteria.js'
 import { exportCodeLists } from './export-code-lists.js'
+import { exportPlantUML } from './export-plantuml.js'
+import { planImport, executeImport } from './import-plantuml.js'
+import { applySql } from './apply-sql.js'
 
 const { program } = caporal
 const log = console.log
@@ -16,12 +19,20 @@ const loadDatabase = (filePath) => {
   const buffer = fs.readFileSync(path.resolve(filePath))
   const reader = new MDBReader(buffer)
 
+  let operations = []
+  try {
+    operations = reader.getTable('t_operation').getData()
+  } catch {
+    // t_operation may not exist in minimal .eapx files
+  }
+
   return {
     objects: reader.getTable('t_object').getData(),
     objectProperties: reader.getTable('t_objectproperties').getData(),
     attributes: reader.getTable('t_attribute').getData(),
     packages: reader.getTable('t_package').getData(),
     connectors: reader.getTable('t_connector').getData(),
+    operations,
   }
 }
 
@@ -161,6 +172,75 @@ log(chalk.green(`✓ Generated codelist metadata (codelists.json)`))
     log(`Criteria: exported to ${criteriaFile}`)
     log(`Code Lists: ${stats.successful}/${stats.total} files written to ${codeListsDir}`)
     if (stats.failed > 0) log(chalk.yellow(`⚠ ${stats.failed} code list(s) failed`))
+  })
+
+  // =========================================================================
+  // PlantUML Roundtrip Commands
+  // =========================================================================
+
+  .command('plantuml', 'Export model to PlantUML (.puml) files')
+  .argument('[eafile]', 'EA database file', { default: 'ESPD_CM.eapx' })
+  .option('-o, --output <dir>', 'Output directory', { default: 'outputs/plantuml' })
+  .action(({ args, options }) => {
+    log(chalk.bold('\n=== Exporting to PlantUML ==='))
+    const db = loadDatabase(args.eafile)
+
+    const results = exportPlantUML(db)
+
+    if (!fs.existsSync(options.output)) fs.mkdirSync(options.output, { recursive: true })
+
+    results.forEach(result => {
+      const filePath = path.join(options.output, result.fileName)
+      fs.writeFileSync(filePath, result.content, 'utf-8')
+      log(chalk.green(`  ✓ ${result.fileName} (${result.packageName})`))
+    })
+
+    log(chalk.bold(`\n${results.length} .puml file(s) written to ${options.output}`))
+  })
+
+  .command('plantuml-import', 'Import PlantUML changes back into EA database')
+  .argument('[eafile]', 'EA database file', { default: 'ESPD_CM.eapx' })
+  .option('-i, --input <dir>', 'Directory with .puml files', { default: 'outputs/plantuml' })
+  .option('-o, --output <dir>', 'Directory for generated SQL', { default: 'outputs' })
+  .option('--target-package <name>', 'Target package name for new elements')
+  .option('--dry-run', 'Parse and plan only, do not apply changes', { default: false })
+  .option('--apply', 'Apply SQL directly to the database (requires ODBC driver)', { default: false })
+  .action(({ args, options }) => {
+    log(chalk.bold('\n=== Importing PlantUML into EA ==='))
+
+    const { sql, summary, parsed } = planImport(args.eafile, options.input, {
+      targetPackage: options.targetPackage,
+      dryRun: options.dryRun,
+    })
+
+    log(chalk.blue(`\nParsed ${parsed.files} file(s): ${parsed.elements} elements, ${parsed.relations} relations`))
+
+    if (options.dryRun) {
+      log(chalk.yellow('\n[DRY RUN] No changes applied.'))
+      log(`  Would create: ${summary.created} element(s)`)
+      log(`  Would update: ${summary.updated} element(s)`)
+      log(`  Would add: ${summary.connectors} connector(s)`)
+      log(`  Total SQL statements: ${sql.length}`)
+      return
+    }
+
+    // Write SQL file
+    const sqlFile = executeImport(args.eafile, sql, options.output)
+
+    log(chalk.blue(`\nSummary:`))
+    log(`  Created: ${summary.created} element(s)`)
+    log(`  Updated: ${summary.updated} element(s)`)
+    log(`  Connectors: ${summary.connectors}`)
+    log(`  SQL file: ${sqlFile}`)
+
+    // Optionally apply directly
+    if (options.apply) {
+      log(chalk.bold('\nApplying changes to database...'))
+      applySql(args.eafile, sqlFile)
+    } else {
+      log(chalk.yellow(`\nTo apply changes, run:`))
+      log(chalk.yellow(`  node apply-sql.js ${args.eafile} ${sqlFile}`))
+    }
   })
 
 program.run()
