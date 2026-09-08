@@ -7,6 +7,7 @@ import chalk from 'chalk'
 import caporal from '@caporal/core'
 import { exportCriteria } from './export-criteria.js'
 import { exportCodeLists } from './export-code-lists.js'
+import { getUnrecognizedTypeWarnings } from './export-package.js'
 
 const { program } = caporal
 const log = console.log
@@ -23,6 +24,14 @@ const loadDatabase = (filePath) => {
     packages: reader.getTable('t_package').getData(),
     connectors: reader.getTable('t_connector').getData(),
   }
+}
+
+const printUnrecognizedTypeSummary = () => {
+  const warnings = getUnrecognizedTypeWarnings()
+  if (warnings.length === 0) return
+
+  log(chalk.yellow(`\n⚠ ${warnings.length} node(s) had an unrecognized label and were defaulted to CRITERION (children not exported):`))
+  warnings.forEach(w => log(chalk.yellow(`  - ${w.name}${w.label ? ` (label: ${w.label})` : ''}`)))
 }
 
 program
@@ -42,6 +51,7 @@ program
     const outputFile = path.join(options.output, 'espd-edm.json')
     fs.writeFileSync(outputFile, JSON.stringify(result, null, 2))
     log(chalk.green(`✓ Wrote ${outputFile}`))
+    printUnrecognizedTypeSummary()
   })
 
   .command('code-lists', 'Export code lists to .gc files')
@@ -117,6 +127,7 @@ program
     const criteriaFile = path.join(options.output, 'espd-edm.json')
     fs.writeFileSync(criteriaFile, JSON.stringify(criteriaResult, null, 2))
     log(chalk.green(`✓ Wrote ${criteriaFile}`))
+    printUnrecognizedTypeSummary()
 
     // Code lists
     log(chalk.bold('\n--- Code Lists ---'))
