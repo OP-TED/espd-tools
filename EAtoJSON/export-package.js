@@ -38,6 +38,13 @@ const NODE_TYPES = {
   ECONOMIC_OPERATOR_PARTY: /\/EOP\d+(\r?\n)?$/,
   QUALIFYING_PARTY: /\/QP\d+(\r?\n)?$/,
   POWER_OF_ATTORNEY: /\/POA\d+(\r?\n)?$/,
+  // INFORMATION: signature (I73) chain — SIG -> SP -> PL.
+  // End-anchored, and checked before PROCUREMENT_PROJECT_LOT below since
+  // "PPLR" starts with "PPL" but is a distinct, unrelated leaf node.
+  LOT_REFERENCE: /\/PPLR\d+(\r?\n)?$/,
+  SIGNATURE: /\/SIG\d+(\r?\n)?$/,
+  SIGNATORY_PARTY: /\/SP\d+(\r?\n)?$/,
+  PHYSICAL_LOCATION: /\/PL\d+(\r?\n)?$/,
 }
 
 const GROUP_TYPES = new Set([
@@ -48,6 +55,9 @@ const GROUP_TYPES = new Set([
   'CONTRACTING_PARTY', 'PARTY', 'POSTAL_ADDRESS',
   'ADDITIONAL_DOCUMENT_REFERENCE',
   'ECONOMIC_OPERATOR_PARTY', 'QUALIFYING_PARTY', 'POWER_OF_ATTORNEY',
+  // INFORMATION: signature (I73) container types.
+  // PHYSICAL_LOCATION and LOT_REFERENCE are leaves and intentionally excluded.
+  'SIGNATURE', 'SIGNATORY_PARTY',
 ])
 const ROOT_TYPE_ORDER = [
   'CRITERION',
@@ -96,6 +106,10 @@ const extractLabel = (nodeName) => {
   return match ? match[1] : null
 }
 
+// Accumulates every fallback so callers (export.js) can print a summary
+// after a run, instead of these being silently swallowed.
+let unrecognizedTypeWarnings = []
+
 const getNodeType = (node) => {
   const nodeName = node.Name
 
@@ -107,7 +121,23 @@ const getNodeType = (node) => {
     }
   }
 
+  // No known pattern matched this node's label (e.g. an EA suffix like
+  // /SIG, /SP, /PL that hasn't been added to NODE_TYPES yet). Defaulting
+  // silently to CRITERION would misclassify it as a leaf and drop any of
+  // its children — so warn loudly instead of failing silently.
+  const label = extractLabel(nodeName)
+  unrecognizedTypeWarnings.push({ name: nodeName, label })
+  log(chalk.yellow(
+    `⚠ Unrecognized node type for "${nodeName}"${label ? ` (label: ${label})` : ''} — defaulting to CRITERION. Children of this node will NOT be exported. Add a NODE_TYPES pattern for this label if it's expected.`
+  ))
+
   return 'CRITERION'
+}
+
+const getUnrecognizedTypeWarnings = () => unrecognizedTypeWarnings
+
+const resetUnrecognizedTypeWarnings = () => {
+  unrecognizedTypeWarnings = []
 }
 
 function getLabelPrefix(label) {
@@ -521,4 +551,4 @@ const exportPackage = (db, packageCode, orderMap = null) => {
   return toArrayComponents(criterion)
 }
 
-export { exportPackage }
+export { exportPackage, getUnrecognizedTypeWarnings, resetUnrecognizedTypeWarnings }

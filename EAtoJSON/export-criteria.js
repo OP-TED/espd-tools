@@ -1,6 +1,7 @@
-import { exportPackage } from './export-package.js'
+import { exportPackage, resetUnrecognizedTypeWarnings } from './export-package.js'
 
 function exportCriteria (db) {
+  resetUnrecognizedTypeWarnings()
   const result = []
 
   // Collect all structure attributes
