@@ -26,6 +26,18 @@ const loadDatabase = (filePath) => {
     // t_operation may not exist in minimal .eapx files
   }
 
+  // Diagram tables — optional, only present in full EA projects.
+  // t_diagram        : the diagrams themselves (name, type, parent package)
+  // t_diagramobjects : which elements are placed on each diagram
+  // t_diagramlinks   : which connectors are drawn on each diagram
+  const optionalTable = (name) => {
+    try {
+      return reader.getTable(name).getData()
+    } catch {
+      return []
+    }
+  }
+
   return {
     objects: reader.getTable('t_object').getData(),
     objectProperties: reader.getTable('t_objectproperties').getData(),
@@ -33,6 +45,9 @@ const loadDatabase = (filePath) => {
     packages: reader.getTable('t_package').getData(),
     connectors: reader.getTable('t_connector').getData(),
     operations,
+    diagrams: optionalTable('t_diagram'),
+    diagramObjects: optionalTable('t_diagramobjects'),
+    diagramLinks: optionalTable('t_diagramlinks'),
   }
 }
 
@@ -192,10 +207,14 @@ log(chalk.green(`✓ Generated codelist metadata (codelists.json)`))
     results.forEach(result => {
       const filePath = path.join(options.output, result.fileName)
       fs.writeFileSync(filePath, result.content, 'utf-8')
-      log(chalk.green(`  ✓ ${result.fileName} (${result.packageName})`))
+      const kind = result.kind === 'diagram' ? 'diagram' : 'package'
+      log(chalk.green(`  ✓ ${result.fileName} (${kind}: ${result.packageName})`))
     })
 
+    const diagramCount = results.filter(r => r.kind === 'diagram').length
+    const packageCount = results.length - diagramCount
     log(chalk.bold(`\n${results.length} .puml file(s) written to ${options.output}`))
+    log(chalk.gray(`  (${packageCount} package(s), ${diagramCount} diagram(s))`))
   })
 
   .command('plantuml-import', 'Import PlantUML changes back into EA database')
