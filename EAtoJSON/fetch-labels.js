@@ -2,11 +2,98 @@ import { readFile, writeFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
+import https from 'https'
+import { HttpsProxyAgent } from 'https-proxy-agent'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CACHE_FILE = `${__dirname}/.cache/codelist-labels.json`
 
 const SPARQL_ENDPOINT = 'https://publications.europa.eu/webapi/rdf/sparql'
+
+/**
+ * Decide whether `hostname` should bypass the proxy, per the NO_PROXY env var.
+ * Supports comma-separated entries, a leading dot or `*.` wildcard, and `*`.
+ */
+function bypassesProxy (hostname) {
+  const noProxy = process.env.NO_PROXY || process.env.no_proxy || ''
+  if (!noProxy) return false
+  return noProxy.split(',').map(s => s.trim().toLowerCase()).filter(Boolean).some(entry => {
+    if (entry === '*') return true
+    const host = hostname.toLowerCase()
+    const bare = entry.replace(/^\*?\./, '') // "*.europa.eu" / ".europa.eu" -> "europa.eu"
+    return host === bare || host.endsWith('.' + bare)
+  })
+}
+
+/**
+ * Ordered list of connection strategies (proxy agents) to try for `url`,
+ * honouring HTTPS_PROXY/HTTP_PROXY and NO_PROXY. NO_PROXY only expresses a
+ * PREFERENCE for a direct connection — in some corporate networks the host
+ * resolves to a non-routable internal IP and is only reachable via the proxy,
+ * so we return BOTH the preferred and the fallback path and let the caller
+ * retry the alternate on a connection error.
+ */
+function connectionStrategies (url) {
+  const { hostname } = new URL(url)
+  const proxy =
+    process.env.HTTPS_PROXY || process.env.https_proxy ||
+    process.env.HTTP_PROXY || process.env.http_proxy
+  const direct = { label: 'direct', agent: undefined }
+  if (!proxy) return [direct]
+  const viaProxy = { label: 'proxy', agent: new HttpsProxyAgent(proxy) }
+  // Preferred first, alternate second: NO_PROXY match -> try direct then proxy;
+  // otherwise -> try proxy then direct.
+  return bypassesProxy(hostname) ? [direct, viaProxy] : [viaProxy, direct]
+}
+
+const CONNECTION_ERROR = /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|ECONNRESET|EHOSTUNREACH|ENETUNREACH|socket hang up|timed out/i
+
+/** Single HTTPS POST attempt with a specific agent. */
+function httpsPostOnce (url, agent, { headers, body, timeout }) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, { method: 'POST', headers, agent, timeout }, res => {
+      const chunks = []
+      res.on('data', c => chunks.push(c))
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf-8')
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error(`HTTP ${res.statusCode}`))
+          return
+        }
+        try {
+          resolve(JSON.parse(text))
+        } catch (e) {
+          reject(new Error(`Invalid JSON response: ${e.message}`))
+        }
+      })
+    })
+    req.on('timeout', () => req.destroy(new Error('Request timed out')))
+    req.on('error', reject)
+    req.end(body)
+  })
+}
+
+/**
+ * Proxy-aware HTTPS POST returning the parsed JSON body. Uses the `https`
+ * module (which respects the chosen proxy agent) rather than global fetch,
+ * which ignores HTTPS_PROXY/NO_PROXY. Tries the preferred connection strategy
+ * and falls back to the alternate on a connection-level error.
+ */
+async function httpsPostJson (url, { headers = {}, body = '', timeout = 30000 } = {}) {
+  const strategies = connectionStrategies(url)
+  let lastError
+  for (const { agent } of strategies) {
+    try {
+      return await httpsPostOnce(url, agent, { headers, body, timeout })
+    } catch (error) {
+      lastError = error
+      // Only fall through to the alternate path on a connection-level failure;
+      // an HTTP error (e.g. 500) is the server's answer and should not retry.
+      if (!CONNECTION_ERROR.test(error.message)) throw error
+    }
+  }
+  throw lastError
+}
 
 const QUERIES = {
   exclusionGround: `
@@ -62,7 +149,14 @@ async function loadFromCache () {
     const json = await readFile(CACHE_FILE, 'utf-8')
     const data = JSON.parse(json)
 
-    for (const [code, entry] of Object.entries(data)) {
+    const entries = Object.entries(data)
+    // Treat an empty (or non-object) cache as a MISS: an empty `{}` would
+    // otherwise short-circuit the SPARQL fetch permanently, leaving every
+    // criterion without its authoritative label/description. Only a populated
+    // cache counts as a hit.
+    if (entries.length === 0) return false
+
+    for (const [code, entry] of entries) {
       codelistMap.set(code, entry)
     }
 
@@ -89,26 +183,16 @@ async function saveToCache () {
 async function executeSparqlQuery (query, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 30000)
-
-      const response = await fetch(SPARQL_ENDPOINT, {
-        method: 'POST',
+      // Node's global fetch (undici) ignores HTTPS_PROXY/NO_PROXY, so route via
+      // the https module with a resolved proxy agent (see httpsPostJson).
+      const data = await httpsPostJson(SPARQL_ENDPOINT, {
         headers: {
           'Content-Type': 'application/sparql-query',
           Accept: 'application/sparql-results+json'
         },
         body: query,
-        signal: controller.signal
+        timeout: 30000
       })
-
-      clearTimeout(timeout)
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const data = await response.json()
       return data.results.bindings
     } catch (error) {
       if (attempt === retries) {
