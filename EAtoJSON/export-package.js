@@ -78,6 +78,24 @@ const CARDINALITY_MAP = {
   '0..*': '0..n',   // Optional multiple
 }
 
+// ============================================
+// XML mapping configuration
+// ============================================
+
+// EA stores the diagram/ordering metadata of a criterion as a pseudo-attribute
+// called "structure" (a JSON blob). It is model tooling, not an XML child
+// element, so it is never emitted in xmlChildren.
+const NON_XML_ATTRIBUTES = new Set(['structure'])
+
+// Namespace prefixes we know how to classify. "cbc" elements carry a value of
+// their own (scalar / leaf text nodes); "cac" elements are aggregates whose
+// content is the node's own children, so a serializer must recurse into
+// `components` instead of emitting text.
+const XML_PREFIX_KINDS = {
+  cbc: 'scalar',
+  cac: 'relationship',
+}
+
 const log = console.log
 // ============================================
 // Utility Functions
@@ -104,6 +122,90 @@ const cleanName = (name) =>
 const extractLabel = (nodeName) => {
   const match = nodeName.match(/\/([A-Z]+\d+)(\r?\n)?$/)
   return match ? match[1] : null
+}
+
+// ============================================
+// XML mapping helpers (object classifier + node attributes)
+// ============================================
+
+// EA writes namespaced names with a double colon ("cbc::ID") and the PlantUML
+// export renders them with a dot ("cbc.ID"). Downstream consumers serialize
+// XML, so xmlChildren[].name is normalised to the XML QName form: "cbc:ID".
+// Only the first separator is rewritten, so a local name containing a dot
+// survives untouched.
+const toXmlQName = (eaName) =>
+  String(eaName).trim().replace(/\s*(?:::|:|\.)\s*/, ':')
+
+// Tells a consumer whether a child element holds a value of its own or is a
+// container to be filled from the node's `components`.
+const classifyXmlChild = (qName) => {
+  const prefix = qName.includes(':') ? qName.split(':')[0] : ''
+  return XML_PREFIX_KINDS[prefix] ?? 'unknown'
+}
+
+// t_object.Classifier points at the Object_ID of the class an instance is
+// classified by, and that class's Name is the XML element name
+// ("cac::TenderingCriterionProperty"). Memoised per database because the
+// lookup is needed for every node of every package.
+const classifierIndexCache = new WeakMap()
+
+const getClassifierIndex = (db) => {
+  let index = classifierIndexCache.get(db)
+  if (!index) {
+    index = new Map(db.objects.map(obj => [obj.Object_ID, obj.Name]))
+    classifierIndexCache.set(db, index)
+  }
+  return index
+}
+
+// Same resolution the PlantUML export uses for the <<stereotype>> shown on a
+// class: the instance's own Stereotype when EA has one, otherwise the name of
+// its classifier. No instance in the current ESPD model carries a Stereotype,
+// so the classifier is what actually resolves; the first branch is kept so
+// xmlElementName keeps matching the diagrams if that ever changes.
+const resolveXmlElementName = (node, classifierIndex) => {
+  if (typeof node.Stereotype === 'string' && node.Stereotype.trim()) {
+    return node.Stereotype.trim()
+  }
+
+  const classifierId = Number(node.Classifier)
+  if (!Number.isInteger(classifierId) || classifierId <= 0) return null
+
+  const name = classifierIndex.get(classifierId)
+  return typeof name === 'string' && name.trim() ? name.trim() : null
+}
+
+const normalizeAttributeValue = (raw) => {
+  if (raw === null || raw === undefined) return null
+  const value = String(raw).trim()
+  return value === '' ? null : value
+}
+
+// Flat, order-preserving list of the XML child elements of a node.
+// t_attribute rows do not come back in model order, so they are sorted by Pos
+// (EA's own attribute ordering) with the row ID as a deterministic tie-break.
+const buildXmlChildren = (nodeAttributes) =>
+  nodeAttributes.
+    filter(attr => typeof attr.Name === 'string' && attr.Name.trim()).
+    filter(attr => !NON_XML_ATTRIBUTES.has(attr.Name.trim())).
+    slice().
+    sort((a, b) => (a.Pos ?? 0) - (b.Pos ?? 0) || (a.ID ?? 0) - (b.ID ?? 0)).
+    map(attr => {
+      const name = toXmlQName(attr.Name)
+      return {
+        name,
+        value: normalizeAttributeValue(attr.Default),
+        kind: classifyXmlChild(name),
+      }
+    })
+
+// Appends the XML mapping to a built component. Both keys are always present:
+// a node with no attributes gets an empty xmlChildren array rather than having
+// the key omitted.
+const withXmlMapping = (component, node) => {
+  component.xmlElementName = node._xmlElementName ?? null
+  component.xmlChildren = node._xmlChildren ?? []
+  return component
 }
 
 // Accumulates every fallback so callers (export.js) can print a summary
@@ -171,14 +273,25 @@ const getPackageElements = (db, code) => {
     : []
 }
 
-const enrichWithAttributes = (db, node) => {
-  const attributes = db.attributes.filter(
-    attr => attr.Object_ID === node.Object_ID).reduce((acc, attr) => {
+const enrichWithAttributes = (db, node, classifierIndex) => {
+  const nodeAttributes = db.attributes.filter(
+    attr => attr.Object_ID === node.Object_ID)
+
+  const attributes = nodeAttributes.reduce((acc, attr) => {
     acc[attr.Name] = attr.Default || undefined
     return acc
   }, {})
 
-  return { ...node, ...attributes }
+  // The flat map above is lossy by design (it drops order, and collapses
+  // "present with no value" into undefined) and is what the existing field
+  // builders read. _xmlChildren keeps the ordered, value-preserving view an XML
+  // serializer needs; _xmlElementName keeps the object classifier.
+  return {
+    ...node,
+    ...attributes,
+    _xmlElementName: resolveXmlElementName(node, classifierIndex),
+    _xmlChildren: buildXmlChildren(nodeAttributes),
+  }
 }
 
 const findRootNode = (db, elements) => {
@@ -349,6 +462,8 @@ const buildSimpleComponent = (node, parentPath) => {
     component.responsepath = currentPath
   }
 
+  withXmlMapping(component, node)
+
   return { label, component }
 }
 
@@ -387,6 +502,8 @@ const buildGroup = (db, objectsById, counters, orderMap) => (node, parentPath) =
   if (node['cbc::PropertyGroupTypeCode']) {
     group.code = node['cbc::PropertyGroupTypeCode']
   }
+
+  withXmlMapping(group, node)
 
   // Process children recursively
   const rawChildren = getChildrenOf(db, node.Object_ID, objectsById)
@@ -442,7 +559,7 @@ const createRootCriterion = (rootNode, code) => {
   // Get labels from codelist database
   const { label, description } = typeCode ? getLabels(typeCode) : { label: '', description: '' }
 
-  return {
+  return withXmlMapping({
     tag,
     type,
     uuid: getUUID(rootNode),
@@ -453,7 +570,7 @@ const createRootCriterion = (rootNode, code) => {
     description: description || rootNode['cbc::Description'] || '',
     requestpath: `${tag}_${typeCode}`,
     responsepath: `${tag}_${typeCode}`,
-  }
+  }, rootNode)
 }
 
 const buildEDMTree = (db, rootNode, packageElements, code, orderMap) => {
@@ -526,9 +643,11 @@ const exportPackage = (db, packageCode, orderMap = null) => {
     return null
   }
 
-  // Enrich elements with attributes
+  // Enrich elements with attributes and with their XML mapping
+  // (object classifier + ordered list of child elements)
+  const classifierIndex = getClassifierIndex(db)
   const enrichedElements = packageElements.map(elem =>
-    enrichWithAttributes(db, elem),
+    enrichWithAttributes(db, elem, classifierIndex),
   )
 
   // Find and validate root node

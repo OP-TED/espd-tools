@@ -220,6 +220,57 @@ C1: {
 }
 ```
 
+### XML mapping keys
+
+Every node in `espd-edm.json` — the Criterion/Information root, every container and every leaf — carries the information needed to serialize it to UBL XML without going back to the EA model. Two keys hold it:
+
+| Key                 | Type             | Definition                                                                                                                                                                      |
+| ------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **xmlElementName**  | string           | The UML object classifier of the node in EA, i.e. the XML element the node maps to (e.g. `cac::TenderingCriterionProperty`). This is the `<<stereotype>>` shown on the exported PlantUML class diagrams. |
+| **xmlChildren**     | Array of Objects | Flat, order-preserving list of the XML child elements to emit for this node. Always present; an empty array when the node has no attributes in the model.                        |
+
+Each entry of `xmlChildren` is:
+
+| Key        | Type           | Definition                                                                                                                                          |
+| ---------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **name**   | string         | The child element name as an XML QName, e.g. `cbc:ID`.                                                                                              |
+| **value**  | string \| null | The value carried by the attribute in the model (the text after `=` on the diagram), or `null` when the attribute is name-only.                      |
+| **kind**   | string         | `scalar` for a `cbc` element that holds its own value, `relationship` for a `cac` aggregate whose content comes from the node's `components`, `unknown` for an unrecognised prefix. |
+
+#### Name format
+
+EA stores attribute names with a double colon (`cbc::ID`) and the PlantUML export renders them with a dot (`cbc.ID`). Since the consumers of this file produce XML, **`xmlChildren[].name` uses the single-colon XML QName form** (`cbc:ID`). Only the namespace separator is rewritten; the local name is passed through verbatim, including any typo present in the model, so the JSON always reflects the model as it actually is.
+
+`xmlElementName` deliberately keeps EA's `::` notation so it can be matched one-to-one against the diagrams.
+
+#### Reading `kind`
+
+`kind` tells a serializer whether to emit text or to recurse. A `scalar` child is a leaf: write the element with `value` as its content (or fill it from the response for an input field). A `relationship` child names the aggregate under which this node's `components` go — its `value` is always `null`, and the actual content comes from the matching entries of `components`.
+
+The `structure` pseudo-attribute that EA uses to store diagram and ordering metadata is not an XML element and is excluded from `xmlChildren`.
+
+```
+{
+    "tag": "RQ3",
+    "type": "REQUIREMENT",
+    "cardinality": "1",
+    "requestpath": "C31_slc-stand-to-spec-avg/RG1/RSG1/RQ3",
+    "description": "Minimum amount requirement",
+    "propertydatatype": "MINIMUM_AMOUNT",
+    "code": "REQUIREMENT",
+    "responsepath": "C31_slc-stand-to-spec-avg/RG1/RSG1/RQ3/R1",
+    "contentpath": "C31_slc-stand-to-spec-avg/RG1/RSG1/RQ3/R1/RV",
+    "xmlElementName": "cac::TenderingCriterionProperty",
+    "xmlChildren": [
+        { "name": "cbc:ID",                "value": null,                         "kind": "scalar" },
+        { "name": "cbc:Name",              "value": null,                         "kind": "scalar" },
+        { "name": "cbc:Description",       "value": "Minimum amount requirement", "kind": "scalar" },
+        { "name": "cbc:TypeCode",          "value": "REQUIREMENT",                "kind": "scalar" },
+        { "name": "cbc:ValueDataTypeCode", "value": "MINIMUM_AMOUNT",             "kind": "scalar" }
+    ]
+}
+```
+
 The content of the following elements must be fetched form eCertis based on the UUID of the Criterion, and the structure of the ESPD EDM must be augmented with those details. In particular for **SUBCRITERION**:
 
 - **LEGISLATION** corresponds to EU directives and regulations that must be observed by all ESPD participants at any moment. This is normally plain text with eventual liks to the actual legislation. User is not required to feed any particular information.

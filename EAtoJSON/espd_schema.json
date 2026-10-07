@@ -7,6 +7,36 @@
     "cardinalityType": {
       "enum" : ["1", "0..n", "1..n", "0..1"]
     },
+    "xmlElementName": {
+      "description": "The UML object classifier of the node in the EA model, i.e. the XML element this node maps to. Kept in the EA notation shown on the diagrams (e.g. cac::TenderingCriterionProperty).",
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9]*::[A-Za-z][A-Za-z0-9]*$"
+    },
+    "xmlChild": {
+      "description": "One XML child element to emit for a node, taken from the node's attributes in the EA model.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The child element name as an XML QName (e.g. cbc:ID). EA stores cbc::ID and the PlantUML export renders cbc.ID; both are normalised to the single-colon XML form.",
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9]*:[A-Za-z][A-Za-z0-9._-]*$"
+        },
+        "value": {
+          "description": "The value carried by the attribute in the EA model, or null when the attribute is name-only.",
+          "type": ["string", "null"]
+        },
+        "kind": {
+          "description": "scalar: a cbc element holding its own value. relationship: a cac aggregate whose content comes from the node's components. unknown: an unrecognised namespace prefix in the model.",
+          "enum": ["scalar", "relationship", "unknown"]
+        }
+      },
+      "required": [ "name", "value", "kind" ]
+    },
+    "xmlChildren": {
+      "description": "Flat, order-preserving list of the XML child elements of a node. Order matches the attribute order in the EA model. Empty when the node has no attributes.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/xmlChild" }
+    },
     "componentType" :{
       "enum": ["QUESTION_GROUP", "QUESTION_SUBGROUP", "REQUIREMENT_GROUP", "REQUIREMENT_SUBGROUP", "QUESTION", "REQUIREMENT", "CAPTION", "SUBCRITERION", "ADDITIONAL_DESCRIPTION_LINE", "LEGISLATION", "CRITERION", "CONTRACTING_PARTY", "PARTY", "POSTAL_ADDRESS", "PARTY_IDENTIFICATION", "PARTY_NAME", "CONTACT", "COUNTRY", "ADDITIONAL_DOCUMENT_REFERENCE", "ATTACHMENT", "PROCUREMENT_PROJECT", "PROCUREMENT_PROJECT_LOT", "ECONOMIC_OPERATOR_PARTY", "QUALIFYING_PARTY", "POWER_OF_ATTORNEY", "SIGNATURE", "SIGNATORY_PARTY", "PHYSICAL_LOCATION", "LOT_REFERENCE"]
     },
@@ -19,9 +49,11 @@
         "requestpath": { "type":"string" },
         "responsepath": { "type": "string" },
         "title": { "type": "string" },
-        "description": { "type": "string" }
+        "description": { "type": "string" },
+        "xmlElementName": { "$ref": "#/$defs/xmlElementName" },
+        "xmlChildren": { "$ref": "#/$defs/xmlChildren" }
       },
-      "required": [ "tag", "type", "cardinality", "requestpath", "responsepath", "title" ]
+      "required": [ "tag", "type", "cardinality", "requestpath", "responsepath", "title", "xmlElementName", "xmlChildren" ]
     },
     "componentItem": {
       "type": "object",
@@ -43,9 +75,11 @@
         "title": { "type": "string" },
         "propertydatatype": { "type": "string" },
         "sellervalue": { "type": "string" },
-        "buyervalue": { "type": "string" }
+        "buyervalue": { "type": "string" },
+        "xmlElementName": { "$ref": "#/$defs/xmlElementName" },
+        "xmlChildren": { "$ref": "#/$defs/xmlChildren" }
       },
-      "required": [ "tag", "type", "requestpath", "responsepath" ]
+      "required": [ "tag", "type", "requestpath", "responsepath", "xmlElementName", "xmlChildren" ]
     },
     "criterion": {
       "type": "object",
@@ -62,9 +96,11 @@
         "name": { "type": "string" },
         "description": { "type": "string" },
         "requestpath": { "type": "string" },
-        "responsepath": { "type": "string" }
+        "responsepath": { "type": "string" },
+        "xmlElementName": { "$ref": "#/$defs/xmlElementName" },
+        "xmlChildren": { "$ref": "#/$defs/xmlChildren" }
       },
-      "required": [ "tag", "type", "uuid", "code", "cardinality", "components", "name", "requestpath", "responsepath" ]
+      "required": [ "tag", "type", "uuid", "code", "cardinality", "components", "name", "requestpath", "responsepath", "xmlElementName", "xmlChildren" ]
     },
     "information": {
       "type": "object",
@@ -81,9 +117,11 @@
         "name": { "type": "string" },
         "description": { "type": "string" },
         "requestpath": { "type": "string" },
-        "responsepath": { "type": "string" }
+        "responsepath": { "type": "string" },
+        "xmlElementName": { "$ref": "#/$defs/xmlElementName" },
+        "xmlChildren": { "$ref": "#/$defs/xmlChildren" }
       },
-      "required": [ "tag", "type", "cardinality", "components", "name", "requestpath", "responsepath" ]
+      "required": [ "tag", "type", "cardinality", "components", "name", "requestpath", "responsepath", "xmlElementName", "xmlChildren" ]
     },
     "additionalInformation": {
       "type": "object",
@@ -99,7 +137,9 @@
         "name": { "type": "string" },
         "description": { "type": "string" },
         "requestpath": { "type": "string" },
-        "responsepath": { "type": "string" }
+        "responsepath": { "type": "string" },
+        "xmlElementName": { "$ref": "#/$defs/xmlElementName" },
+        "xmlChildren": { "$ref": "#/$defs/xmlChildren" }
       },
       "required": [ "tag", "type", "cardinality", "components", "name", "requestpath", "responsepath" ]
     },
