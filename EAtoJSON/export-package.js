@@ -1,64 +1,96 @@
 // ============================================
-// ESPD-EDM Parser - Improved Version
+// ESPD-EDM Parser
 // ============================================
+//
+// Public surface: exportPackage / getUnrecognizedTypeWarnings /
+// resetUnrecognizedTypeWarnings, plus normalizeCode / normalizeObjectName for
+// export-criteria.js.
+//
+// Output is unchanged from the previous implementation except for one
+// deliberate fix, documented under CHILD_ORDER below, which reorders the
+// children of RG1/RSG1 in C37, C38 and C39.
+//
+// Removed relative to the previous implementation, all verified against the
+// EA model:
+//   - the `orderMap` parameter chain (its only reader was commented out, and
+//     buildEDMTree already dropped it at the root call)
+//   - the [DEBUG C37] trace blocks
+//   - `var criterion` and the stale "remove this if-else" / UBL 2.5 markers
+//   - the `node['cardinality']` fallback (no such EA attribute exists)
+//   - 'GROUP' / 'SUBGROUP' type entries (getNodeType can never return them)
+//   - a dead `rawLabel ||` and a redundant `.slice()`
 
 import { getLabels } from './fetch-labels.js'
 import chalk from 'chalk'
 
-// Configuration and Constants
-const NODE_TYPES = {
-  LEGISLATION: /\/L\d+(\r?\n)?$/,
-  CAPTION: '/CA',
-  ADDITIONAL_DESCRIPTION_LINE: '/ADL',
-  SUBCRITERION: '/SBC',
-  QUESTION: /\/Q\d+(\r?\n)?$/,
-  REQUIREMENT: /\/RQ\d+(\r?\n)?$/,
-  QUESTION_SUBGROUP: '/QSG',
-  QUESTION_GROUP: '/QG',
-  REQUIREMENT_SUBGROUP: '/RSG',
-  REQUIREMENT_GROUP: '/RG',
-  // INFORMATION structures (e.g. Part I contracting body).
-  // Anchored to the end of the label so nested paths don't collide
-  // (e.g. ".../PAR1" must not match POSTAL_ADDRESS "/PA").
-  CONTRACTING_PARTY: /\/CP\d+(\r?\n)?$/,
-  PARTY: /\/PAR\d+(\r?\n)?$/,
-  PARTY_IDENTIFICATION: /\/PI\d+(\r?\n)?$/,
-  PARTY_NAME: /\/PN\d+(\r?\n)?$/,
-  POSTAL_ADDRESS: /\/PA\d+(\r?\n)?$/,
-  CONTACT: /\/CTC\d+(\r?\n)?$/,
-  COUNTRY: /\/CTR\d+(\r?\n)?$/,
-  // INFORMATION: additional document reference (I68) and procurement project (I70).
-  // End-anchored to avoid ADR/ADL and PP/PPL collisions.
-  ADDITIONAL_DOCUMENT_REFERENCE: /\/ADR\d+(\r?\n)?$/,
-  ATTACHMENT: /\/ATT\d+(\r?\n)?$/,
-  PROCUREMENT_PROJECT_LOT: /\/PPL\d+(\r?\n)?$/,
-  PROCUREMENT_PROJECT: /\/PP\d+(\r?\n)?$/,
-  // INFORMATION: economic operator party (I71) and power of attorney (I72).
-  // End-anchored to avoid QP/QG, POA/PA and EOP/EO collisions.
-  ECONOMIC_OPERATOR_PARTY: /\/EOP\d+(\r?\n)?$/,
-  QUALIFYING_PARTY: /\/QP\d+(\r?\n)?$/,
-  POWER_OF_ATTORNEY: /\/POA\d+(\r?\n)?$/,
-  // INFORMATION: signature (I73) chain — SIG -> SP -> PL.
-  // End-anchored, and checked before PROCUREMENT_PROJECT_LOT below since
-  // "PPLR" starts with "PPL" but is a distinct, unrelated leaf node.
-  LOT_REFERENCE: /\/PPLR\d+(\r?\n)?$/,
-  SIGNATURE: /\/SIG\d+(\r?\n)?$/,
-  SIGNATORY_PARTY: /\/SP\d+(\r?\n)?$/,
-  PHYSICAL_LOCATION: /\/PL\d+(\r?\n)?$/,
+const log = console.log
+
+// ============================================
+// Node classification
+// ============================================
+
+// Every node below a criterion root is named with a trailing "/<PREFIX><n>"
+// label (Q1, QSG3, PPLR2, ...). Classification is therefore an exact lookup on
+// that one token — which removes the precedence problem the previous pattern
+// table had: it tested unanchored substrings ('/SBC', '/CA', '/QG') against the
+// WHOLE path, so an ancestor's label could win over the node's own. A question
+// group nested under a subcriterion ("…/SBC1/QG1") classified as SUBCRITERION,
+// because '/SBC' was checked first. Harmless today only because every /SBC
+// node in the model happens to be childless.
+const TYPE_BY_LABEL_PREFIX = {
+  // Criterion structures
+  L: 'LEGISLATION',
+  CA: 'CAPTION',
+  ADL: 'ADDITIONAL_DESCRIPTION_LINE',
+  SBC: 'SUBCRITERION',
+  Q: 'QUESTION',
+  RQ: 'REQUIREMENT',
+  QSG: 'QUESTION_SUBGROUP',
+  QG: 'QUESTION_GROUP',
+  RSG: 'REQUIREMENT_SUBGROUP',
+  RG: 'REQUIREMENT_GROUP',
+  // INFORMATION structures: contracting body / party chain (I68, I69)
+  CP: 'CONTRACTING_PARTY',
+  PAR: 'PARTY',
+  PI: 'PARTY_IDENTIFICATION',
+  PN: 'PARTY_NAME',
+  PA: 'POSTAL_ADDRESS',
+  CTC: 'CONTACT',
+  CTR: 'COUNTRY',
+  // INFORMATION: document reference (I68) and procurement project (I70)
+  ADR: 'ADDITIONAL_DOCUMENT_REFERENCE',
+  ATT: 'ATTACHMENT',
+  PPL: 'PROCUREMENT_PROJECT_LOT',
+  PP: 'PROCUREMENT_PROJECT',
+  PPLR: 'LOT_REFERENCE',
+  // INFORMATION: economic operator party (I71) and power of attorney (I72)
+  EOP: 'ECONOMIC_OPERATOR_PARTY',
+  QP: 'QUALIFYING_PARTY',
+  POA: 'POWER_OF_ATTORNEY',
+  // INFORMATION: signature (I73) chain — SIG -> SP -> PL
+  SIG: 'SIGNATURE',
+  SP: 'SIGNATORY_PARTY',
+  PL: 'PHYSICAL_LOCATION',
 }
 
+// Types that own nested components and must be recursed into. Leaves are
+// everything else — including PHYSICAL_LOCATION and LOT_REFERENCE, which are
+// deliberately absent.
 const GROUP_TYPES = new Set([
   'QUESTION_GROUP', 'QUESTION_SUBGROUP',
   'REQUIREMENT_GROUP', 'REQUIREMENT_SUBGROUP',
-  'GROUP', 'SUBGROUP', 'SUBCRITERION',
-  // INFORMATION container types (have nested components)
+  'SUBCRITERION',
   'CONTRACTING_PARTY', 'PARTY', 'POSTAL_ADDRESS',
   'ADDITIONAL_DOCUMENT_REFERENCE',
   'ECONOMIC_OPERATOR_PARTY', 'QUALIFYING_PARTY', 'POWER_OF_ATTORNEY',
-  // INFORMATION: signature (I73) container types.
-  // PHYSICAL_LOCATION and LOT_REFERENCE are leaves and intentionally excluded.
   'SIGNATURE', 'SIGNATORY_PARTY',
 ])
+
+// ============================================
+// Child ordering
+// ============================================
+
+// Order of a criterion root's direct children, by node type.
 const ROOT_TYPE_ORDER = [
   'CRITERION',
   'SUBCRITERION',
@@ -66,10 +98,23 @@ const ROOT_TYPE_ORDER = [
   'REQUIREMENT_GROUP',
   'QUESTION_GROUP',
 ]
-const GROUP_TYPES_FOR_ORDERING = [  'REQUIREMENT_GROUP',
-  'QUESTION_GROUP',  'REQUIREMENT_SUBGROUP',
-  'QUESTION_SUBGROUP','GROUP', 'SUBGROUP']
 
+// Order of a group's children, by label prefix, keyed on the parent's type.
+// Within one prefix, children are ordered by their label number.
+//
+// FIX: the previous implementation declared these same sequences but derived
+// the prefix with a hand-rolled startsWith ladder that returned 'R' for an
+// "RQ1" label. 'R' is in neither sequence, so indexOf gave -1 and every
+// requirement sorted ahead of everything — captions included. Visible in three
+// criteria (C37, C38, C39), which emitted [RQ1, RQ2, CA1, QSG1…] instead of
+// [CA1, RQ1, RQ2, QSG1…]. Deriving the prefix from the label token below keeps
+// the two vocabularies in sync by construction.
+const CHILD_ORDER = {
+  QUESTION_GROUP: ['CA', 'Q', 'RQ', 'QSG', 'RSG'],
+  QUESTION_SUBGROUP: ['CA', 'Q', 'RQ', 'QSG', 'RSG'],
+  REQUIREMENT_GROUP: ['CA', 'RQ', 'Q', 'RSG', 'QSG'],
+  REQUIREMENT_SUBGROUP: ['CA', 'RQ', 'Q', 'RSG', 'QSG'],
+}
 
 const CARDINALITY_MAP = {
   '0..1': '0..1',   // Optional single
@@ -96,7 +141,6 @@ const XML_PREFIX_KINDS = {
   cac: 'relationship',
 }
 
-const log = console.log
 // ============================================
 // Utility Functions
 // ============================================
@@ -119,9 +163,27 @@ const getUUID = (obj) => {
 const cleanName = (name) =>
   name.split('/').pop().replace(/\r?\n/g, '')
 
+// EA names routinely carry trailing newlines. Declared-order maps are keyed by
+// the criterion root object's name, so both sides must normalise identically.
+const normalizeObjectName = (name) =>
+  String(name ?? '').replace(/\r?\n/g, '').trim()
+
+// The trailing "<PREFIX><n>" token of a node's name, e.g. "QSG1". Null for a
+// criterion root, whose name is "C01_exg-crim-part" with no label segment.
 const extractLabel = (nodeName) => {
   const match = nodeName.match(/\/([A-Z]+\d+)(\r?\n)?$/)
   return match ? match[1] : null
+}
+
+// "QSG1" -> "QSG". The single source of truth for prefixes, shared by
+// classification (TYPE_BY_LABEL_PREFIX) and ordering (CHILD_ORDER).
+const getLabelPrefix = (label) =>
+  label ? label.replace(/\d+$/, '') : ''
+
+const getLabelNumber = (label) => {
+  if (!label) return Number.MAX_SAFE_INTEGER
+  const match = label.match(/\d+$/)
+  return match ? parseInt(match[0], 10) : Number.MAX_SAFE_INTEGER
 }
 
 // ============================================
@@ -185,12 +247,11 @@ const normalizeAttributeValue = (raw) => {
 // t_attribute rows do not come back in model order, so they are sorted by Pos
 // (EA's own attribute ordering) with the row ID as a deterministic tie-break.
 const buildXmlChildren = (nodeAttributes) =>
-  nodeAttributes.
-    filter(attr => typeof attr.Name === 'string' && attr.Name.trim()).
-    filter(attr => !NON_XML_ATTRIBUTES.has(attr.Name.trim())).
-    slice().
-    sort((a, b) => (a.Pos ?? 0) - (b.Pos ?? 0) || (a.ID ?? 0) - (b.ID ?? 0)).
-    map(attr => {
+  nodeAttributes
+    .filter(attr => typeof attr.Name === 'string' && attr.Name.trim())
+    .filter(attr => !NON_XML_ATTRIBUTES.has(attr.Name.trim()))
+    .sort((a, b) => (a.Pos ?? 0) - (b.Pos ?? 0) || (a.ID ?? 0) - (b.ID ?? 0))
+    .map(attr => {
       const name = toXmlQName(attr.Name)
       return {
         name,
@@ -208,29 +269,25 @@ const withXmlMapping = (component, node) => {
   return component
 }
 
+// ============================================
+// Node type resolution
+// ============================================
+
 // Accumulates every fallback so callers (export.js) can print a summary
 // after a run, instead of these being silently swallowed.
 let unrecognizedTypeWarnings = []
 
 const getNodeType = (node) => {
-  const nodeName = node.Name
+  const label = extractLabel(node.Name)
+  const type = TYPE_BY_LABEL_PREFIX[getLabelPrefix(label)]
+  if (type) return type
 
-  // Check patterns in order of specificity
-  for (const [type, pattern] of Object.entries(NODE_TYPES)) {
-    if (pattern instanceof RegExp ? pattern.test(nodeName) : nodeName.includes(
-      pattern)) {
-      return type
-    }
-  }
-
-  // No known pattern matched this node's label (e.g. an EA suffix like
-  // /SIG, /SP, /PL that hasn't been added to NODE_TYPES yet). Defaulting
-  // silently to CRITERION would misclassify it as a leaf and drop any of
-  // its children — so warn loudly instead of failing silently.
-  const label = extractLabel(nodeName)
-  unrecognizedTypeWarnings.push({ name: nodeName, label })
+  // The node's label carries a prefix with no mapping (e.g. a new EA suffix).
+  // Defaulting silently to CRITERION would treat it as a leaf and drop its
+  // children, so warn loudly instead of failing silently.
+  unrecognizedTypeWarnings.push({ name: node.Name, label })
   log(chalk.yellow(
-    `⚠ Unrecognized node type for "${nodeName}"${label ? ` (label: ${label})` : ''} — defaulting to CRITERION. Children of this node will NOT be exported. Add a NODE_TYPES pattern for this label if it's expected.`
+    `⚠ Unrecognized node type for "${node.Name}"${label ? ` (label: ${label})` : ''} — defaulting to CRITERION. Children of this node will NOT be exported. Add a TYPE_BY_LABEL_PREFIX entry for this label if it's expected.`
   ))
 
   return 'CRITERION'
@@ -240,22 +297,6 @@ const getUnrecognizedTypeWarnings = () => unrecognizedTypeWarnings
 
 const resetUnrecognizedTypeWarnings = () => {
   unrecognizedTypeWarnings = []
-}
-
-function getLabelPrefix(label) {
-  if (!label) return ''
-  if (label.startsWith('QSG')) return 'QSG'
-  if (label.startsWith('RSG')) return 'RSG'
-  if (label.startsWith('Q')) return 'Q'
-  if (label.startsWith('R')) return 'R'
-  if (label.startsWith('CA')) return 'CA'
-  return ''
-}
-
-function getLabelNumber(label) {
-  if (!label) return Number.MAX_SAFE_INTEGER
-  const match = label.match(/\d+$/)
-  return match ? parseInt(match[0], 10) : Number.MAX_SAFE_INTEGER
 }
 
 // ============================================
@@ -294,21 +335,31 @@ const enrichWithAttributes = (db, node, classifierIndex) => {
   }
 }
 
+// The root is the one structural object in the package that nothing points at.
+// More than one candidate means a detached object in the diagram, which would
+// otherwise be picked up silently as a criterion root.
 const findRootNode = (db, elements) => {
   const incomingConnections = new Set(
     db.connectors.map(conn => conn.End_Object_ID),
   )
 
- const structuralElements = elements.filter(
-    e => e.Object_Type === "Object"
-  )
-  var rootNode = structuralElements.find(elem => !incomingConnections.has(elem.Object_ID))
-  return rootNode
+  const candidates = elements
+    .filter(elem => elem.Object_Type === 'Object')
+    .filter(elem => !incomingConnections.has(elem.Object_ID))
+
+  if (candidates.length > 1) {
+    log(chalk.yellow(
+      `⚠ ${candidates.length} root candidates in package — using the first. Candidates: ${candidates.map(c => cleanName(c.Name)).join(', ')}`
+    ))
+  }
+
+  return candidates[0]
 }
 
-const getChildrenOf = (db, objectId, objectsById) => {
-  return db.connectors.filter(conn => conn.Start_Object_ID === objectId).
-    map(conn => {
+const getChildrenOf = (db, objectId, objectsById) =>
+  db.connectors
+    .filter(conn => conn.Start_Object_ID === objectId)
+    .map(conn => {
       const child = objectsById.get(conn.End_Object_ID)
       if (!child) return null
 
@@ -316,86 +367,74 @@ const getChildrenOf = (db, objectId, objectsById) => {
         ...child,
         _cardinality: normalizeCardinality(conn.DestCard),
       }
-    }).
-    filter(Boolean)
+    })
+    .filter(Boolean)
+
+// EA's per-criterion `structure` tree declares the real child order of every
+// node, so it is the authority. It is only usable when the labels it lists are
+// exactly the children the model actually has: a blob that is stale (missing a
+// child, naming one that no longer exists, or carrying a typo like "SCB1" for
+// "SBC1") would otherwise silently drop or duplicate nodes. Returns null when
+// the declared order cannot be trusted, so the caller can fall back.
+const applyDeclaredOrder = (children, declared) => {
+  if (!Array.isArray(declared) || declared.length === 0) return null
+
+  const actual = children.map(child => extractLabel(child.Name))
+  if (actual.some(label => !label)) return null
+
+  // Labels must be unique on both sides, or "find by label" is ambiguous.
+  if (new Set(actual).size !== actual.length) return null
+  if (new Set(declared).size !== declared.length) return null
+
+  if (actual.length !== declared.length) return null
+  if ([...actual].sort().join(',') !== [...declared].sort().join(',')) return null
+
+  return declared.map(label => children.find(c => extractLabel(c.Name) === label))
 }
-function orderChildren({
-  children,
-  parentPath,
-  parentType,
-  orderMap,
-  isRoot = false
-}) {
-  // // Explicit structure order (from EA)
-  // const explicit = orderMap?.[parentPath]
-  // if (explicit) {
-  //   return explicit
-  //     .map(label => children.find(c => extractLabel(c.Name) === label))
-  //     .filter(Boolean)
-  // }
 
-  // Root ordering by TYPE
-  if (isRoot) {
-    return [...children].sort((a, b) => {
-    const ta = getNodeType(a)
-    const tb = getNodeType(b)
+const orderChildren = ({ children, parentType, isRoot = false, declared, where }) => {
+  // EA's declared order wins whenever it is consistent with the model.
+  const byDeclaredOrder = applyDeclaredOrder(children, declared)
+  if (byDeclaredOrder) return byDeclaredOrder
 
-    const ra = ROOT_TYPE_ORDER.indexOf(ta)
-    const rb = ROOT_TYPE_ORDER.indexOf(tb)
-
-    // Dfferent types → type order wins
-    if (ra !== rb) return ra - rb
-
-    // Same type → order by number (QG1 < QG2, RG1 < RG2, etc.)
-    const la = extractLabel(a.Name)
-    const lb = extractLabel(b.Name)
-
-    const na = getLabelNumber(la)
-    const nb = getLabelNumber(lb)
-
-    return na - nb
-  })
-}
-  // Group ordering by LABEL prefix
-  if (GROUP_TYPES_FOR_ORDERING.includes(parentType)) {
-    let order = null
-
-    if (
-      parentType === 'QUESTION_GROUP' ||
-      parentType === 'QUESTION_SUBGROUP'
-    ) {
-      order = ['CA','Q','RQ', 'QSG','RSG']
-    }
-
-    if (
-      parentType === 'REQUIREMENT_GROUP' ||
-      parentType === 'REQUIREMENT_SUBGROUP'
-    ) {
-      order = ['CA','RQ', 'Q', 'RSG','QSG']
-    }
-
-    if (order) {
-      return [...children].sort((a, b) => {
-        const la = extractLabel(a.Name) || ''
-        const lb = extractLabel(b.Name) || ''
-
-        const pa = getLabelPrefix(la)
-        const pb = getLabelPrefix(lb)
-
-        const ra = order.indexOf(pa)
-        const rb = order.indexOf(pb)
-        if (ra !== rb) return ra - rb
-
-        
-      const na = getLabelNumber(la)
-      const nb = getLabelNumber(lb)
-      return na - nb
-      })
-    }
+  if (declared) {
+    log(chalk.yellow(
+      `⚠ ${where}: the structure blob declares [${declared.join(',')}] but the model has [${
+        children.map(c => extractLabel(c.Name) ?? '?').join(',')
+      }] — ignoring the declared order here and falling back to label order.`
+    ))
   }
 
-  // Fallback
-  return children
+  // A criterion root orders its children by node TYPE, then by label number
+  // within a type (QG1 before QG2).
+  if (isRoot) {
+    return [...children].sort((a, b) => {
+      const rankA = ROOT_TYPE_ORDER.indexOf(getNodeType(a))
+      const rankB = ROOT_TYPE_ORDER.indexOf(getNodeType(b))
+
+      // Different types → type order wins
+      if (rankA !== rankB) return rankA - rankB
+
+      // Same type → order by number
+      return getLabelNumber(extractLabel(a.Name)) -
+        getLabelNumber(extractLabel(b.Name))
+    })
+  }
+
+  // A group orders its children by label PREFIX, then by label number.
+  const order = CHILD_ORDER[parentType]
+  if (!order) return children
+
+  return [...children].sort((a, b) => {
+    const labelA = extractLabel(a.Name)
+    const labelB = extractLabel(b.Name)
+
+    const rankA = order.indexOf(getLabelPrefix(labelA))
+    const rankB = order.indexOf(getLabelPrefix(labelB))
+    if (rankA !== rankB) return rankA - rankB
+
+    return getLabelNumber(labelA) - getLabelNumber(labelB)
+  })
 }
 
 // ============================================
@@ -433,7 +472,8 @@ const buildStandardFields = (node, type) => {
     fields.propertydatatype = node['cbc::ValueDataTypeCode'] || 'INDICATOR'
   }
 
-  // Add optional metadata
+  // Add optional metadata. For a leaf, cbc::TypeCode is the property type
+  // ("QUESTION"), not a criterion code.
   if (node['cbc::TypeCode']) fields.code = node['cbc::TypeCode']
   if (node['cbc::CodeListID']) fields.codelist = node['cbc::CodeListID']
 
@@ -467,32 +507,33 @@ const buildSimpleComponent = (node, parentPath) => {
   return { label, component }
 }
 
-const generateUniqueLabel = (counters, baseLabel, parentPath, type) => {
+// Fallback label for a group whose EA name carries no "/<PREFIX><n>" segment.
+// No node in the current model needs this.
+const generateUniqueLabel = (counters, parentPath, type) => {
   const counterKey = `${parentPath}_${type}`
   counters[counterKey] = (counters[counterKey] || 0) + 1
   const count = counters[counterKey]
-  return `${baseLabel}${count > 1 ? count : ''}`
+  return `${type.substring(0, 2)}${count > 1 ? count : ''}`
 }
 
-const buildGroup = (db, objectsById, counters, orderMap) => (node, parentPath) => {
+const buildGroup = (ctx, node, parentPath, parentRelativePath) => {
   const type = getNodeType(node)
-  const rawLabel = extractLabel(node.Name)
-
-  // Generate unique label
-  const label = rawLabel ?? generateUniqueLabel(
-    counters,
-    rawLabel || type.substring(0, 2),
-    parentPath,
-    type,
-  )
+  const label = extractLabel(node.Name) ??
+    generateUniqueLabel(ctx.counters, parentPath, type)
 
   const currentPath = parentPath ? `${parentPath}/${label}` : label
 
-  const resolvedCardinality = node._cardinality ?? node['cardinality'] ?? undefined
+  // Path relative to the criterion root ("QG1/QSG1"). The declared-order map is
+  // keyed this way rather than by requestpath: the blob's root segment is the EA
+  // object name, which diverges from the requestpath for the OT criteria
+  // ("C57_OT_shelt-worksh" vs "OT57_shelt-worksh") and for C18.
+  const currentRelativePath = parentRelativePath
+    ? `${parentRelativePath}/${label}`
+    : label
 
   const group = {
     type,
-    ...(resolvedCardinality !== undefined && { cardinality: resolvedCardinality }),
+    ...(node._cardinality !== undefined && { cardinality: node._cardinality }),
     components: {},
     requestpath: currentPath,
     responsepath: currentPath,
@@ -506,58 +547,77 @@ const buildGroup = (db, objectsById, counters, orderMap) => (node, parentPath) =
   withXmlMapping(group, node)
 
   // Process children recursively
-  const rawChildren = getChildrenOf(db, node.Object_ID, objectsById)
-
   const children = orderChildren({
-    children: rawChildren,
-    parentPath: currentPath,
+    children: getChildrenOf(ctx.db, node.Object_ID, ctx.objectsById),
     parentType: type,
-    orderMap
+    declared: ctx.declaredOrder?.get(currentRelativePath),
+    where: `${ctx.criterionCode} @ ${currentRelativePath}`,
   })
+
   children.forEach(child => {
     const { label: childLabel, component: childComponent } =
-      buildComponent(db, objectsById, counters, orderMap)(child, currentPath)
+      buildComponent(ctx, child, currentPath, currentRelativePath)
     group.components[childLabel] = childComponent
   })
 
   return { label, component: group }
 }
 
-const buildComponent = (db, objectsById, counters, orderMap) => (
-  node, parentPath = '') => {
-  const type = getNodeType(node)
-
-  if (GROUP_TYPES.has(type)) {
-    return buildGroup(db, objectsById, counters, orderMap)(node, parentPath)
-  }
-
-  return buildSimpleComponent(node, parentPath)
-}
+const buildComponent = (ctx, node, parentPath = '', parentRelativePath = '') =>
+  GROUP_TYPES.has(getNodeType(node))
+    ? buildGroup(ctx, node, parentPath, parentRelativePath)
+    : buildSimpleComponent(node, parentPath)
 
 // ============================================
 // Tree Builder
 // ============================================
 
-function extractSuffix (code) {
-  const parts = code.split('_')
-  return parts[1] || null // returns null if no underscore found
+// Legacy part markers that some EA root object names still carry between the
+// package number and the criterion code ("C57_OT_shelt-worksh"). They are a
+// leftover of the v3/v4 naming scheme and are not part of the code itself.
+const LEGACY_PART_MARKERS = /^(?:EG|SC|OT)_/
+
+// Last-resort derivation of the criterion/information code from the EA root
+// object's name. Everything after the FIRST underscore is the code — splitting
+// on '_' and taking [1] truncates hyphen-free-but-underscored names and, for
+// the OT packages, returns the part marker ("OT") instead of the code.
+const extractSuffix = (name) => {
+  const underscore = name.indexOf('_')
+  if (underscore === -1) return null
+
+  const suffix = name.slice(underscore + 1).replace(/\r?\n/g, '').trim()
+  if (!suffix) return null
+
+  return suffix.replace(LEGACY_PART_MARKERS, '') || null
 }
 
 const createRootCriterion = (rootNode, code) => {
-  // Determine criterion type and tag
-  let type = 'CRITERION'
-  let tag = code
+  const tag = code
+  const type = code.startsWith('I') ? 'INFORMATION' : 'CRITERION'
 
-  if (code.startsWith('I')) {
-    type = 'INFORMATION'
-  }
-
-  // Extract typeCode from TypeCode field or Name suffix
-  const typeCode = rootNode['cbc::TypeCode'] ||
+  // The criterion code lives in cbc::CriterionTypeCode on the root object —
+  // that is the authoritative value and the one that must end up in
+  // cbc:CriterionTypeCode in the XML. cbc::TypeCode is kept as a secondary
+  // source, and the root object's name suffix only as a last resort: the
+  // INFORMATION packages (I68-I73) carry no CriterionTypeCode, and the OT
+  // packages are still named with the legacy "C57_OT_<code>" scheme, where the
+  // name alone cannot be trusted to yield the code.
+  const typeCode = rootNode['cbc::CriterionTypeCode'] ||
+    rootNode['cbc::TypeCode'] ||
     (rootNode.Name ? extractSuffix(rootNode.Name) : undefined)
 
+  // typeCode is the path prefix for every node in the subtree, so losing it
+  // would stamp "<tag>_undefined" into several hundred cbc:ID values.
+  if (!typeCode) {
+    log(chalk.red(
+      `✗ ${tag}: no criterion code found (cbc::CriterionTypeCode, cbc::TypeCode and the name suffix "${cleanName(rootNode.Name)}" all failed) — paths will contain "undefined".`
+    ))
+  }
+
   // Get labels from codelist database
-  const { label, description } = typeCode ? getLabels(typeCode) : { label: '', description: '' }
+  const { label, description } = typeCode
+    ? getLabels(typeCode)
+    : { label: '', description: '' }
 
   return withXmlMapping({
     tag,
@@ -573,67 +633,63 @@ const createRootCriterion = (rootNode, code) => {
   }, rootNode)
 }
 
-const buildEDMTree = (db, rootNode, packageElements, code, orderMap) => {
-  // This is until UBL version 2.5 is finalized
+const buildEDMTree = (db, rootNode, packageElements, code, declaredOrder) => {
   const criterion = createRootCriterion(rootNode, code)
-  // Remove the above
-  const counters = {}
 
-  // Create lookup map for efficiency
-  const objectsById = new Map(
-    packageElements.map(elem => [elem.Object_ID, elem]),
-  )
-
-  // Process all children
-  const rawChildren = getChildrenOf(db, rootNode.Object_ID, objectsById)
+  const ctx = {
+    db,
+    // Lookup map for efficiency
+    objectsById: new Map(packageElements.map(elem => [elem.Object_ID, elem])),
+    counters: {},
+    declaredOrder,
+    criterionCode: code,
+  }
 
   const children = orderChildren({
-    children: rawChildren,
-    parentPath: criterion.requestpath,
+    children: getChildrenOf(db, rootNode.Object_ID, ctx.objectsById),
     parentType: 'CRITERION',
-    orderMap,
-    isRoot: true
+    isRoot: true,
+    // The root's own children are keyed under the empty relative path.
+    declared: declaredOrder?.get(''),
+    where: `${code} @ root`,
   })
+
   children.forEach(child => {
-    const { label, component } = buildComponent(
-      db,
-      objectsById,
-      counters,
-    )(child, criterion.requestpath)
+    const { label, component } = buildComponent(ctx, child, criterion.requestpath, '')
     criterion.components[label] = component
   })
 
   return criterion
 }
 
-function toArrayComponents(node) {
+// The builders keep `components` as a label-keyed object so siblings can be
+// addressed while the tree is being assembled; the published shape is an array
+// with the label folded in as `tag`.
+const toArrayComponents = (node) => {
   if (!node || typeof node !== 'object') return node
 
-  // If node has components as an object map, convert to array
-  if (node.components && !Array.isArray(node.components) && typeof node.components === 'object') {
-    const entries = Object.entries(node.components)
-
-    node.components = entries.map(([tag, child]) => {
-      const childNode = { tag,...child }
-      return toArrayComponents(childNode)
-    })
-  } else if (Array.isArray(node.components)) {
-    node.components = node.components.map(c => toArrayComponents(c))
+  if (Array.isArray(node.components)) {
+    node.components = node.components.map(toArrayComponents)
+  } else if (node.components && typeof node.components === 'object') {
+    node.components = Object.entries(node.components).map(
+      ([tag, child]) => toArrayComponents({ tag, ...child })
+    )
   }
 
   return node
 }
+
 // ============================================
 // Main Export Function
 // ============================================
 
-const exportPackage = (db, packageCode, orderMap = null) => {
+// declaredOrders: Map<rootObjectName, Map<relativePath, string[]>> built from
+// EA's per-criterion `structure` trees by export-criteria.js. Omit it and the
+// label heuristics are used throughout.
+const exportPackage = (db, packageCode, declaredOrders = null) => {
   const code = normalizeCode(packageCode)
   if (!code) {
     throw new Error(`Invalid package code format: ${packageCode}`)
-  }
-  if(code === "C37"){
-    log(chalk.yellow(`\n[DEBUG C37] packageCode: ${packageCode}, normalized: ${code}`))
   }
 
   const packageElements = getPackageElements(db, code)
@@ -650,24 +706,33 @@ const exportPackage = (db, packageCode, orderMap = null) => {
     enrichWithAttributes(db, elem, classifierIndex),
   )
 
-  // Find and validate root node
   const rootNode = findRootNode(db, enrichedElements)
   if (!rootNode) {
-    throw new Error('No root node found in package')
+    throw new Error(`No root node found in package ${code}`)
   }
 
-  if(code === "C37"){
-    log(chalk.yellow(`[DEBUG C37] rootNode.Name: ${rootNode.Name}`))
-    log(chalk.yellow(`[DEBUG C37] rootNode['cbc::TypeCode']: ${rootNode['cbc::TypeCode']}`))
-    log(chalk.yellow(`[DEBUG C37] extractSuffix result: ${extractSuffix(rootNode.Name)}`))
+  // Declared order is looked up by the root object's name, which is what EA
+  // stores as the tree's root path.
+  const declaredOrder = declaredOrders?.get(normalizeObjectName(rootNode.Name))
+
+  if (declaredOrders && !declaredOrder) {
+    log(chalk.yellow(
+      `⚠ ${code}: no usable structure tree for "${normalizeObjectName(rootNode.Name)}" — child order falls back to label heuristics.`
+    ))
   }
-  var criterion
-  // TODO: Revert this for version 5.0.0 before final release
-  // Remove this if-else statement
-  
-  criterion = buildEDMTree(db, rootNode, enrichedElements, code, orderMap)
-  // Remove the above
-  return toArrayComponents(criterion)
+
+  return toArrayComponents(
+    buildEDMTree(db, rootNode, enrichedElements, code, declaredOrder)
+  )
 }
 
-export { exportPackage, getUnrecognizedTypeWarnings, resetUnrecognizedTypeWarnings }
+export {
+  exportPackage,
+  getUnrecognizedTypeWarnings,
+  resetUnrecognizedTypeWarnings,
+  // Exported so export-criteria.js can reconcile the part/section index
+  // against the packages in the model using the same matching rule, and key
+  // the declared-order maps the same way this module looks them up.
+  normalizeCode,
+  normalizeObjectName,
+}
