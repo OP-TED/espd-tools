@@ -145,11 +145,23 @@ const XML_PREFIX_KINDS = {
 // Utility Functions
 // ============================================
 
+// Canonical form of a criterion package code, used to match a part/section
+// index entry against a package's leading name token. Both sides go through
+// this, so the comparison is insensitive to case and to a missing leading zero
+// ("C1" and "C01" are the same criterion).
+//
+// The optional "_<MARKER>" tail carries the legacy part marker that the seven
+// procedure-level criteria keep in their code: the packages, the index and the
+// root objects all spell them "C65_OT", and the resulting path "C65_OT_sme" is
+// the form v4 published, so the marker has to survive normalisation rather than
+// be stripped. It is deliberately part of the code here, unlike in
+// extractSuffix below, which strips the same marker when deriving a criterion
+// TYPE code from a root object's name.
 const normalizeCode = (code) => {
-  const match = code.match(/^([A-Za-z]{1,2})(\d{1,2})$/)
+  const match = String(code ?? '').match(/^([A-Za-z]{1,2})(\d{1,2})(_[A-Za-z]{1,4})?$/)
   if (!match) return undefined
-  const [, letter, digits] = match
-  return letter.toUpperCase() + digits.padStart(2, '0')
+  const [, letter, digits, marker] = match
+  return letter.toUpperCase() + digits.padStart(2, '0') + (marker?.toUpperCase() ?? '')
 }
 
 const normalizeCardinality = (card) =>
@@ -688,8 +700,17 @@ const toArrayComponents = (node) => {
 // label heuristics are used throughout.
 const exportPackage = (db, packageCode, declaredOrders = null) => {
   const code = normalizeCode(packageCode)
+
+  // Reported and skipped rather than thrown: an index listing several codes the
+  // exporter cannot parse used to abort the whole run on the first one and
+  // write no file at all, so you learned about one bad entry instead of all of
+  // them. The caller already drops a null, and the criterion is visibly absent
+  // from the output either way.
   if (!code) {
-    throw new Error(`Invalid package code format: ${packageCode}`)
+    log(chalk.red(
+      `✗ Invalid criterion code "${packageCode}" in the part/section index — skipping. Expected a code like C01, I68, OT57 or C65_OT.`
+    ))
+    return null
   }
 
   const packageElements = getPackageElements(db, code)
