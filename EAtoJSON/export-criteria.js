@@ -139,18 +139,44 @@ const findPartSectionIndex = (structures) => {
 // Reconciliation
 // ============================================
 
-// Every criterion package that exists in EA with content. Used to catch the
-// silent-omission case: the index decides what gets exported, so a package
-// added to the model but never added to the index just never appears in
-// espd-edm.json, with nothing in the log to say so. C27 and C28 are in exactly
-// that state today (superseded by C66, but the tool never said so).
+// Retired criteria are kept in EA under a package called "deprecated" rather
+// than being deleted — C27 and C28 today, both superseded by C66. They are
+// deliberately absent from the part/section index, so they are not omissions
+// and must not be reported as such: a warning that fires on every run for
+// known-good reasons stops being read, which would defeat the check below.
+// Matched on the whole ancestor chain, not just the direct parent, so grouping
+// them into sub-packages later still works.
+const DEPRECATED_PACKAGE = 'deprecated'
+
+const hasDeprecatedAncestor = (pkg, packagesById) => {
+  const seen = new Set()
+  let current = pkg
+
+  // Guarded against a cyclic Parent_ID; EA should never produce one, but this
+  // walk would hang rather than fail if it did.
+  while (current && !seen.has(current.Package_ID)) {
+    seen.add(current.Package_ID)
+    if (String(current.Name).trim().toLowerCase() === DEPRECATED_PACKAGE) return true
+    current = packagesById.get(current.Parent_ID)
+  }
+
+  return false
+}
+
+// Every criterion package that exists in EA with content and is not
+// deprecated. Used to catch the silent-omission case: the index decides what
+// gets exported, so a package added to the model but never added to the index
+// just never appears in espd-edm.json, with nothing in the log to say so.
 const listCriterionPackages = (db) => {
   const populated = new Set(db.objects.map(obj => obj.Package_ID))
+  const packagesById = new Map(db.packages.map(pkg => [pkg.Package_ID, pkg]))
 
   return db.packages.reduce((acc, pkg) => {
     const [first] = String(pkg.Name).split(' ')
     const code = normalizeCode(first)
-    if (code && populated.has(pkg.Package_ID)) acc.set(code, pkg.Name)
+    if (!code || !populated.has(pkg.Package_ID)) return acc
+    if (hasDeprecatedAncestor(pkg, packagesById)) return acc
+    acc.set(code, pkg.Name)
     return acc
   }, new Map())
 }
