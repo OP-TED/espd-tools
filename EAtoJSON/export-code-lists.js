@@ -2,8 +2,7 @@ import axios from 'axios'
 import { create, convert } from 'xmlbuilder2'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import { HttpProxyAgent } from 'http-proxy-agent'
-
-const EXTERNAL_VOCABULARY_PREFIXES = ['at-voc:', 'esco:']
+import { EXTERNAL_VOCABULARY_PREFIXES } from './model-metadata.js'
 
 // const LANGUAGE_CODES = [
 //   'bul', 'spa', 'ces', 'dan', 'deu', 'est', 'ell', 'eng',
@@ -223,6 +222,18 @@ function getProxyAgent(url) {
     }
 }
 
+// Deliberate, expected omissions - a code list still present in the model that
+// the export is meant to leave out. Distinguished from genuine failures so a
+// failed download can abort the export while a planned omission does not: both
+// used to look identical, and the summary counted neither.
+class SkippedCodeListError extends Error {
+  constructor (message) {
+    super(message)
+    this.name = 'SkippedCodeListError'
+    this.skipped = true
+  }
+}
+
 async function downloadGcXml(enumeration) {
   const url = enumeration.locationUri
   if (!url) {
@@ -231,7 +242,7 @@ async function downloadGcXml(enumeration) {
     )
   }
   if( enumeration.name === 'at-voc:criterion') {
-     throw new Error(
+     throw new SkippedCodeListError(
       `"${enumeration.name}" has been replaced by selection-criterion and exclusion ground.`
     )
   }
@@ -314,6 +325,21 @@ const extractEnumerations = (database) => {
     }
   }
 
+const byCodeUnit = (a, b) => {
+  const x = String(a ?? '')
+  const y = String(b ?? '')
+  return x < y ? -1 : x > y ? 1 : 0
+}
+
+// "failed" excludes deliberate omissions, so callers can treat it as a reason
+// to abort without the planned at-voc:criterion omission aborting every run.
+const countOutcomes = (results) => ({
+  total: results.length,
+  successful: results.filter(r => r.success).length,
+  skipped: results.filter(r => r.skipped).length,
+  failed: results.filter(r => !r.success && !r.skipped).length,
+})
+
 function extractFromGcXml(xml, property) {
   try {
     const doc = convert(xml, { format: 'object' })
@@ -341,12 +367,11 @@ function extractFromGcXml(xml, property) {
 // Main Processing
 // ============================================================================
 
-async function exportCodeLists (db) {
+async function exportCodeLists (db, metadata) {
   const { enumerationsInternal, enumerationsExternal, stats } = extractEnumerations(db)
 
   console.log(
     `Found ${stats.totalFound} total enumerations (${stats.espdCount} ESPD, ${stats.externalCount} external from EU vocabularies).`)
-  const codelistIndex = []
 
   // Generate XML for each enumeration
   const resultsInternal = enumerationsInternal.map(enumeration => {
@@ -358,19 +383,11 @@ async function exportCodeLists (db) {
       const xml = generateGcXml(enumeration)
       const version = extractFromGcXml(xml, "Version")
 
-
-      codelistIndex.push(
-      buildCodelistMetadata({
-        id: shortName,
-        version,
-        source
-      })
-    )
-
       return {
         kind: 'internal',
         fileName: `${shortName}.gc`,
         content: xml,
+        metadata: buildCodelistMetadata({ id: shortName, version, source }),
         valueCount: enumeration.values.length,
         success: true
       }
@@ -379,6 +396,7 @@ async function exportCodeLists (db) {
         kind: 'internal',
         fileName: `${shortName}.gc`,
         error: error.message,
+        skipped: error.skipped === true,
         success: false
       }
     }
@@ -395,18 +413,12 @@ async function exportCodeLists (db) {
         const xml = await downloadGcXml(enumeration)
         const version = extractFromGcXml(xml, "Version")
         shortName = extractFromGcXml(xml, "ShortName") || shortName
-      codelistIndex.push(
-        buildCodelistMetadata({
-          id: shortName,
-          version,
-          source
-        })
-      )
-        
+
         return {
           kind: 'external',
           fileName: `${shortName}.gc`,
           content: xml,
+          metadata: buildCodelistMetadata({ id: shortName, version, source }),
           success: true
         }
       } catch (error) {
@@ -414,17 +426,31 @@ async function exportCodeLists (db) {
           kind: 'external',
           fileName: `${shortName}.gc`,
           error: error.message,
+          skipped: error.skipped === true,
           success: false
         }
       }
     })
   )
 
+  // Built from the ordered results rather than pushed from inside the async
+  // callbacks above: Promise.all preserves the order of its results, but a push
+  // inside the callback runs when that download resolves, so the external block
+  // of the index used to be ordered by HTTP response latency. Every run then
+  // produced a different codelists.json even when nothing had changed, and a
+  // real change was hidden inside a permutation. Sorted on top of that so the
+  // file has one canonical form; compared by code unit rather than
+  // localeCompare() so the result does not depend on the runner's locale.
+  const codelistIndex = [...resultsInternal, ...resultsExternal]
+    .filter(result => result.success)
+    .map(result => result.metadata)
+    .sort((a, b) => byCodeUnit(a.source, b.source) || byCodeUnit(a.id, b.id))
+
   const codelistMetadataFile = {
-  ublVersion: '2.4',
-  espdVersion: '5.0.0-alpha.2',
-  codelists: codelistIndex
-}
+    ublVersion: metadata.ublVersion,
+    espdVersion: metadata.espdVersion,
+    codelists: codelistIndex
+  }
 
   return {
     internal: resultsInternal,
@@ -432,16 +458,8 @@ async function exportCodeLists (db) {
     codelistMetadata: codelistMetadataFile,
     stats: {
       ...stats,
-      internal: {
-        total: resultsInternal.length,
-        successful: resultsInternal.filter(r => r.success).length,
-        failed: resultsInternal.filter(r => !r.success).length
-      },
-      external: {
-        total: resultsExternal.length,
-        successful: resultsExternal.filter(r => r.success).length,
-        failed: resultsExternal.filter(r => !r.success).length
-      }
+      internal: countOutcomes(resultsInternal),
+      external: countOutcomes(resultsExternal)
     }
   }
 }
