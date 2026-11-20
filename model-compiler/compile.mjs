@@ -47,8 +47,9 @@ export function compile(edm, code, sidecar) {
   // The EA lookup uses the sidecar's declared `criterion.code` (the real
   // espd-edm.json code) when present; the `code` argument is the sidecar/output
   // identity (its filename stem), which equals the EA code for the usual case
-  // but differs for the Part II/V 'OT' criteria (filename e.g.
-  // 'ot-reduction-of-candidates', EA code 'OT'). `tag` disambiguates shared codes.
+  // but differs for the Part II/V 'other' criteria (filename e.g.
+  // 'ot-reduction-of-candidates', EA code 'staff-red'). `tag` (e.g. 'C63_OT')
+  // disambiguates codes that are not unique.
   const eaCode = sidecar?.criterion?.code ?? code;
   const tag = sidecar?.criterion?.tag;
   const core = readStructuralCore(edm, eaCode, tag);

@@ -72,8 +72,8 @@
         "properties": {
           "key": { "type": "string", "minLength": 1, "description": "Output identity; the file stem of every file of this criterion." },
           "id": { "type": "string", "minLength": 1, "description": "Stable semantic id of the criterion." },
-          "code": { "type": "string", "minLength": 1, "description": "EA criterion code as in espd-edm.json (generic 'OT' for the Part II/V criteria)." },
-          "tag": { "type": "string", "description": "EA tag disambiguating criteria that share a code (e.g. OT65)." },
+          "code": { "type": "string", "minLength": 1, "description": "EA criterion code as in espd-edm.json." },
+          "tag": { "type": "string", "description": "EA tag (e.g. C65_OT), present for the Part II/V criteria keyed 'ot-<id>'." },
           "part": { "enum": ["I", "II", "III", "IV", "V", "VI"] },
           "leaves": { "type": "integer", "minimum": 0, "description": "Number of value leaves." },
           "repeatableBindings": { "type": "integer", "minimum": 0, "description": "Number of repeatable (0..n) bindings." },

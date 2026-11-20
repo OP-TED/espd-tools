@@ -89,8 +89,8 @@ ESPD version ${envelope.espdVersion}, UBL ${envelope.ublVersion}. ${c.criteria} 
 | \`schema/\` | JSON Schema of \`compiled-model.json\`. |
 
 \`<key>\` is the criterion's output identity and the file stem of all its files. Most criteria use
-their EA code (for example \`slc-stand-to-gen\`); the generic Part II and V criteria use
-\`ot-<id>\` (for example \`ot-eo-size\`).
+their EA code (for example \`slc-stand-to-gen\`); the Part II and V "other" criteria use
+\`ot-<id>\` (for example \`ot-eo-size\`), which keeps their identity stable.
 
 ## Provenance
 

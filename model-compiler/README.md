@@ -40,7 +40,7 @@ model/
                                  scheme-agency-profile, roles
 ```
 
-`<key>` is the output identity of a criterion: its EA code, or `ot-<id>` for the generic Part II/V
+`<key>` is the output identity of a criterion: its EA code, or `ot-<id>` for the Part II/V "other"
 criteria.
 
 `compiled/<key>.json` is what lets an implementation derive its own layers (for example a form)
