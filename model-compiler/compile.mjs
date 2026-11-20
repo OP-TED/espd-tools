@@ -70,9 +70,18 @@ export function generateMappings(compiled, registry) {
 
 /**
  * Emit the neutral layers for a compiled criterion as per-criterion files under
- * `root`. XML mappings are skipped (with a note) when the criterion has a shape the
- * mapping generators do not yet support, so the instance-data layer still emits.
- * Returns the written paths (relative to the cwd).
+ * `root`:
+ *   instance-data/<key>.schema.json + <key>.example.json
+ *   xml-mapping/<key>.request.mapping.json + <key>.response.mapping.json
+ *   compiled/<key>.json   the joined EA structure + enrichment (+ hints), so a
+ *                         consumer can derive its own layers (e.g. a form) from the
+ *                         published model without the EA export or the sidecars.
+ *
+ * XML mappings are skipped (with a note) when the criterion has a shape the mapping
+ * generators do not yet support, so the other layers still emit.
+ *
+ * Returns { written, files }: `written` are the paths relative to the cwd, `files`
+ * the paths relative to `root` (forward slashes; mappings null when skipped).
  */
 export function emitModel(code, compiled, registry, { root, partId } = {}) {
   if (!root) throw new Error('emitModel: { root } is required');
@@ -83,18 +92,28 @@ export function emitModel(code, compiled, registry, { root, partId } = {}) {
     const p = path.join(dir, name);
     fs.writeFileSync(p, JSON.stringify(obj, null, 2) + '\n');
     written.push(path.relative(process.cwd(), p));
+    return `${sub}/${name}`;
   };
 
   const hints = loadHints(code);
-  write('instance-data', `${code}.schema.json`, generateInstanceSchema(compiled, registry, { partId, hints, outputId: code }));
-  write('instance-data', `${code}.example.json`, generateExample(compiled, registry, hints));
+  const files = { requestMapping: null, responseMapping: null };
+  files.instanceSchema = write('instance-data', `${code}.schema.json`, generateInstanceSchema(compiled, registry, { partId, hints, outputId: code }));
+  files.instanceExample = write('instance-data', `${code}.example.json`, generateExample(compiled, registry, hints));
 
   try {
     const { request, response } = generateMappings(compiled, registry);
-    write('xml-mapping', `${code}.request.mapping.json`, request);
-    write('xml-mapping', `${code}.response.mapping.json`, response);
+    files.requestMapping = write('xml-mapping', `${code}.request.mapping.json`, request);
+    files.responseMapping = write('xml-mapping', `${code}.response.mapping.json`, response);
   } catch (err) {
     process.stderr.write(`  (xml-mapping skipped for ${code}: ${err.message.split('\n')[0]})\n`);
   }
-  return written;
+
+  files.compiled = write('compiled', `${code}.json`, {
+    $comment: 'GENERATED. The criterion as compiled from the EA structure plus the enrichment: structure, semantic ids, instance bindings and value types, with the instance-data constraint hints. Lets a consumer derive its own layers (for example a form) from the published model. Do not hand-edit; regenerate.',
+    key: code,
+    partId: partId ?? null,
+    criterion: compiled,
+    hints: hints ?? null,
+  });
+  return { written, files };
 }
