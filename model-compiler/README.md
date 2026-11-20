@@ -37,7 +37,7 @@ model/
   xml-mapping/<key>.request.mapping.json, <key>.response.mapping.json
   compiled/<key>.json            the criterion as joined from structure + enrichment (+ hints)
   registries/                    value-types, encoding-profile, codelist-attributes,
-                                 scheme-agency-profile, roles
+                                 scheme-agency-profile, roles, codelist-governance
 ```
 
 `<key>` is the output identity of a criterion: its EA code, or `ot-<id>` for the Part II/V "other"
@@ -93,6 +93,9 @@ Exit code: 0 ok, 1 a criterion failed to compile (nothing is published), 2 unusa
 inputs.
 
 ## Verifying a published model
+
+> **TODO:** run this in ESPD-EDM's own Checks workflow, which is not on the 5.0.0 branches yet. The call is
+> `node verify.mjs --model model --edm criterion/espd-edm.json`. Until then nothing verifies the published folder automatically.
 
 ```
 node verify.mjs --model <ESPD-EDM/model> [--edm <ESPD-EDM/criterion/espd-edm.json>]

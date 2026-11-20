@@ -14,6 +14,7 @@ export const REGISTRY_FILES = [
   'codelist-attributes.json',
   'scheme-agency-profile.json',
   'roles.json',
+  'codelist-governance.json',
 ];
 
 /** Paths inside the published model folder that this compiler owns and may delete. */
@@ -85,7 +86,7 @@ ESPD version ${envelope.espdVersion}, UBL ${envelope.ublVersion}. ${c.criteria} 
 | \`instance-data/<key>.schema.json\`, \`<key>.example.json\` | JSON Schema (draft 2020-12) and a minimal valid example of the instance data for one criterion. ${c.instanceDataFiles} files. |
 | \`xml-mapping/<key>.request.mapping.json\`, \`<key>.response.mapping.json\` | Declarative specs that map the instance data to and from the UBL ESPD Request and Response. ${c.xmlMappingFiles} files. |
 | \`compiled/<key>.json\` | The criterion as compiled from the EA structure plus the enrichment (structure, semantic ids, instance bindings, value types) with its constraint hints. Lets an implementation derive its own layers, such as a form, without the EA export. ${c.compiledFiles} files. |
-| \`registries/\` | The shared registries: value types (JSON shape and UBL bindings), the XML encoding profile, fixed code list attribute sets, the scheme-agency policy, and the roles. |
+| \`registries/\` | The shared registries: value types (JSON shape and UBL bindings), the XML encoding profile, fixed code list attribute sets, the scheme-agency policy, the roles, and the codelist governance. |
 | \`schema/\` | JSON Schema of \`compiled-model.json\`. |
 
 \`<key>\` is the criterion's output identity and the file stem of all its files. Most criteria use
