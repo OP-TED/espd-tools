@@ -132,3 +132,6 @@ dist
 
 # EAtoJSON generated outputs
 EAtoJSON/outputs/
+
+# model-compiler default output directory
+model-compiler/outputs/
