@@ -17,7 +17,10 @@
     },
     "scripts": {
         "clean": "rmdir /s /q node_modules",
+        "test": "node version-consistency.test.mjs",
         "validate-criteria": "node validate-criteria.js",
+        "check-versions": "node export.js check-versions",
+        "verify-export": "node export.js verify-export",
         "export-criteria": "node export.js criteria",
         "export-code-lists": "node export.js code-lists",
         "export-all": "node export.js all"
