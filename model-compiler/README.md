@@ -106,7 +106,8 @@ structure export. Meant for ESPD-EDM's own checks.
 
 `espd-conceptual-model/.github/workflows/export-update-edm.yml` exports the model, runs this
 compiler on the fresh export, and copies the result to `ESPD-EDM/model` on the branch named like the
-run (never on `main`). The compile step runs before ESPD-EDM is touched, so a model that does not
+run, or on the branch given as `edm_branch` (which must already exist). It never pushes to `main`:
+the check is on the ESPD-EDM branch being written, so a run with `edm_branch=main` is a dry run. The compile step runs before ESPD-EDM is touched, so a model that does not
 compile stops the run. The `espd_tools_ref` it is given must contain `model-compiler`.
 
 ESPD-EDM's README lists its folders; a row for the new folder belongs there:
