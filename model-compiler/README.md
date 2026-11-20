@@ -128,7 +128,24 @@ generation, stay in `espd-demo`.
 
 ## Status
 
-The generators are a copy of the neutral half of `espd-demo/model/compiler` with all hard-coded
-sibling paths replaced by `config.mjs`; both produce byte-identical `instance-data` and
-`xml-mapping` for all 62 criteria. Until the demo is switched to consume the published model, the
-demo keeps its own copy, so a change to a generator has to be made in both places.
+This is the only model compiler. The generators started as the neutral half of the compiler in
+`espd-demo`, with all hard-coded sibling paths replaced by `config.mjs`. `espd-demo` has since been
+switched to consume the published model and no longer contains a compiler: it vendors
+`ESPD-EDM/model` and builds only its own presentation layers from it. Changes to the generators are
+therefore made here only.
+
+Known limitations of the published mappings, found by the demo's roundtrip test over every published
+example (candidates for fixes in the generators):
+
+- a numeric `QUANTITY` answer comes back as a string (`slc-stand-ratio`: the response mapping has no
+  numeric type);
+- a buyer `URL` requirement is not written to the Request (`slc-suit-reg-trade`: `URL` is response-only
+  in the value-type registry);
+- the branching criterion `slc-stand-other` (rating / descriptive / amountRequirements) loses requirement
+  leaves, gains extra array items, and returns a rating as a string.
+
+The generator-focused probe tests that used to live in `espd-demo` (nested arrays, repeatable groups,
+the C07 and breadth probes, the response-mapping roundtrip) were not ported: they also exercised the
+mapping engine and the form generator, which stay in the demo. Their intent is covered by the generic
+roundtrip over all 62 published criteria in the demo and by the parity and generic tests here; porting
+their generator-only assertions is open work.
