@@ -3,7 +3,7 @@
 // folder) and publish the implementer-neutral model into the output directory:
 //
 //   instance-data/  xml-mapping/  compiled/   per criterion
-//   registries/  schema/  compiled-model.json  README.md   (full runs only)
+//   parts/  registries/  schema/  compiled-model.json  README.md   (full runs only)
 //
 // Usage:
 //   node build.mjs [--out <dir>] [--code <criterion-code>]... [--source-ref <text>]
@@ -30,6 +30,7 @@ import { loadEdm, loadSidecar, listModeledCodes, compile, emitModel } from './co
 import { leavesOf } from './read-structural-core.mjs';
 import { buildEnvelope, validateEnvelope, hashFile, hashEnrichment, readVersions } from './envelope.mjs';
 import { cleanOwned, publishRegistries, publishSchema, publishReadme } from './publish.mjs';
+import { publishParts } from './parts.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -122,6 +123,13 @@ if (fullRun) {
   }
   const pkg = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'package.json'), 'utf8'));
   const registries = publishRegistries(root);
+  let parts;
+  try {
+    parts = publishParts(root);
+  } catch (err) {
+    process.stderr.write(`${err.message}\n`);
+    process.exit(1);
+  }
   publishSchema(root);
   const envelope = buildEnvelope({
     ...versions,
@@ -135,6 +143,7 @@ if (fullRun) {
     entries,
     valueTypeRegistry: registry,
     registries,
+    parts,
   });
   const problems = validateEnvelope(envelope);
   if (problems.length) {
@@ -143,5 +152,5 @@ if (fullRun) {
   }
   fs.writeFileSync(path.join(root, 'compiled-model.json'), JSON.stringify(envelope, null, 2) + '\n');
   publishReadme(root, envelope);
-  process.stderr.write(`Wrote compiled-model.json (ESPD ${envelope.espdVersion}, UBL ${envelope.ublVersion}), registries, schema and README.\n`);
+  process.stderr.write(`Wrote compiled-model.json (ESPD ${envelope.espdVersion}, UBL ${envelope.ublVersion}), parts, registries, schema and README.\n`);
 }

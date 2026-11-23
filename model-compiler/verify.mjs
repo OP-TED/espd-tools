@@ -36,12 +36,25 @@ if (!problems.length) {
     for (const rel of Object.values(c.files)) if (rel) listed.add(rel);
   }
   for (const rel of envelope.registries) listed.add(rel);
+  for (const p of envelope.parts) {
+    listed.add(p.manifest);
+    for (const s of p.sections) for (const k of ['schema', 'example', 'mapping', 'form']) listed.add(s[k]);
+  }
   for (const rel of listed) if (!fs.existsSync(path.join(root, rel))) problems.push(`listed file is missing: ${rel}`);
 
   for (const dir of ['instance-data', 'xml-mapping', 'compiled', 'registries']) {
     const abs = path.join(root, dir);
     if (!fs.existsSync(abs)) continue;
     for (const f of fs.readdirSync(abs)) if (!listed.has(`${dir}/${f}`)) problems.push(`file not in the envelope (stale or hand-added): ${dir}/${f}`);
+  }
+  const partsAbs = path.join(root, 'parts');
+  if (fs.existsSync(partsAbs)) {
+    for (const d of fs.readdirSync(partsAbs, { withFileTypes: true })) {
+      if (!d.isDirectory()) { problems.push(`file not in the envelope (stale or hand-added): parts/${d.name}`); continue; }
+      for (const f of fs.readdirSync(path.join(partsAbs, d.name))) {
+        if (!listed.has(`parts/${d.name}/${f}`)) problems.push(`file not in the envelope (stale or hand-added): parts/${d.name}/${f}`);
+      }
+    }
   }
 
   if (values.edm) {
@@ -57,3 +70,4 @@ if (problems.length) {
   process.exit(1);
 }
 process.stdout.write(`Model OK: ${envelope.counts.criteria} criteria, ESPD ${envelope.espdVersion}, UBL ${envelope.ublVersion}${values.edm ? ', structure hash matches' : ''}.\n`);
+

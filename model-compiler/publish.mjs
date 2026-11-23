@@ -15,10 +15,11 @@ export const REGISTRY_FILES = [
   'scheme-agency-profile.json',
   'roles.json',
   'codelist-governance.json',
+  'ui-hints.json',
 ];
 
 /** Paths inside the published model folder that this compiler owns and may delete. */
-export const OWNED = ['instance-data', 'xml-mapping', 'compiled', 'registries', 'schema', 'compiled-model.json', 'README.md'];
+export const OWNED = ['instance-data', 'xml-mapping', 'compiled', 'parts', 'registries', 'schema', 'compiled-model.json', 'README.md'];
 
 /** Remove everything a previous full run produced, so stale criteria cannot linger. */
 export function cleanOwned(root) {
@@ -76,7 +77,7 @@ It is the implementer-neutral model that sits beside the criterion structure
 (\`../criterion/espd-edm.json\`): for each modeled criterion, the shape of the data an
 implementation stores and the mapping of that data to and from the UBL documents.
 
-ESPD version ${envelope.espdVersion}, UBL ${envelope.ublVersion}. ${c.criteria} criteria, ${c.valueTypes} value types.
+ESPD version ${envelope.espdVersion}, UBL ${envelope.ublVersion}. ${c.criteria} criteria, ${c.valueTypes} value types, ${c.partSections} sections of the administrative parts.
 
 ## Layout
 
@@ -86,7 +87,8 @@ ESPD version ${envelope.espdVersion}, UBL ${envelope.ublVersion}. ${c.criteria} 
 | \`instance-data/<key>.schema.json\`, \`<key>.example.json\` | JSON Schema (draft 2020-12) and a minimal valid example of the instance data for one criterion. ${c.instanceDataFiles} files. |
 | \`xml-mapping/<key>.request.mapping.json\`, \`<key>.response.mapping.json\` | Declarative specs that map the instance data to and from the UBL ESPD Request and Response. ${c.xmlMappingFiles} files. |
 | \`compiled/<key>.json\` | The criterion as compiled from the EA structure plus the enrichment (structure, semantic ids, instance bindings, value types) with its constraint hints. Lets an implementation derive its own layers, such as a form, without the EA export. ${c.compiledFiles} files. |
-| \`registries/\` | The shared registries: value types (JSON shape and UBL bindings), the XML encoding profile, fixed code list attribute sets, the scheme-agency policy, the roles, and the codelist governance. |
+| \`parts/<part>/index.json\`, \`section<L>.schema.json\`, \`.example.json\`, \`.mapping.json\`, \`.form.json\` | The administrative parts (I, II, VI), which are not criteria: for each section the instance-data schema, an example, the UBL mapping, and the form (fields, input types, labels, code lists). Authored in the enrichment and published verbatim. ${c.partSections} sections. |
+| \`registries/\` | The shared registries: value types (JSON shape and UBL bindings), the XML encoding profile, fixed code list attribute sets, the scheme-agency policy, the roles, the codelist governance, and the vocabulary of form affordances (UI hints). |
 | \`schema/\` | JSON Schema of \`compiled-model.json\`. |
 
 \`<key>\` is the criterion's output identity and the file stem of all its files. Most criteria use
@@ -101,8 +103,9 @@ The hashes are taken over text with line endings normalised to LF.
 
 ## What is not here
 
-Presentation (form layout, UI types, labels, translations) is the concern of each implementation
-and is not part of this model.
+The form of the criteria (layout, grouping, labels, translations) is the concern of each
+implementation and is not part of this model. The forms of the administrative parts are, because
+every implementation has to fill in the same Part I, II and VI.
 `;
   fs.writeFileSync(path.join(root, 'README.md'), text);
 }

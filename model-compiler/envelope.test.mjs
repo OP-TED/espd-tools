@@ -27,8 +27,12 @@ const entry = (key, part, valueTypes, mappings = true) =>
   ({ key, id: key, code: key, part, leaves: 3, repeatableBindings: 0, valueTypes, files: files(key, mappings) });
 const valueTypeRegistry = { valueTypes: { INDICATOR: { requestXml: {}, responseXml: {} }, DATE: { responseXml: {} }, URL: {} } };
 
-const make = (entries) => buildEnvelope({
-  espdVersion: '5.0.0', ublVersion: '2.4', provenance, entries, valueTypeRegistry, registries: ['registries/b.json', 'registries/a.json'],
+const section = (p, id) => ({ id, schema: `parts/part${p}/section${id}.schema.json`, example: `parts/part${p}/section${id}.example.json`, mapping: `parts/part${p}/section${id}.mapping.json`, form: `parts/part${p}/section${id}.form.json` });
+const partEntry = (p, ids) => ({ part: p, manifest: `parts/part${p}/index.json`, sections: ids.map(id => section(p, id)) });
+const defaultParts = [partEntry('VI', ['A']), partEntry('I', ['A', 'B', 'C'])];
+
+const make = (entries, parts = defaultParts) => buildEnvelope({
+  espdVersion: '5.0.0', ublVersion: '2.4', provenance, entries, valueTypeRegistry, registries: ['registries/b.json', 'registries/a.json'], parts,
 });
 
 let n = 0;
@@ -46,6 +50,18 @@ check('criteria are ordered by part then key; value types and registries sorted'
   assert.deepEqual(env.registries, ['registries/a.json', 'registries/b.json']);
 });
 
+check('the administrative parts are listed ordered by part, and the schema rejects a malformed one', () => {
+  const env = make([entry('x', 'III', [])]);
+  assert.deepEqual(env.parts.map(p => p.part), ['I', 'VI']);
+  assert.equal(env.counts.partSections, 4);
+  const noParts = structuredClone(env); delete noParts.parts;
+  assert.ok(validateEnvelope(noParts).length, 'parts is required');
+  const badPart = structuredClone(env); badPart.parts[0].part = 'III';
+  assert.ok(validateEnvelope(badPart).length, 'only the administrative parts are allowed');
+  const missingFile = structuredClone(env); delete missingFile.parts[0].sections[0].form;
+  assert.ok(validateEnvelope(missingFile).length, 'a section needs all four files');
+});
+
 check('the same input in any order yields identical bytes', () => {
   const a = make([entry('x', 'III', ['DATE', 'INDICATOR']), entry('y', 'IV', ['INDICATOR'])]);
   const b = make([entry('y', 'IV', ['INDICATOR']), entry('x', 'III', ['INDICATOR', 'DATE'])]);
@@ -54,7 +70,7 @@ check('the same input in any order yields identical bytes', () => {
 
 check('counts and value-type usage are derived, a skipped mapping counts as absent', () => {
   const env = make([entry('x', 'III', ['INDICATOR', 'DATE']), entry('y', 'IV', ['INDICATOR'], false)]);
-  assert.deepEqual(env.counts, { criteria: 2, valueTypes: 3, instanceDataFiles: 4, xmlMappingFiles: 2, compiledFiles: 2 });
+  assert.deepEqual(env.counts, { criteria: 2, valueTypes: 3, instanceDataFiles: 4, xmlMappingFiles: 2, compiledFiles: 2, partSections: 4 });
   const usage = Object.fromEntries(env.valueTypes.map(v => [v.name, v.usedBy]));
   assert.deepEqual(usage, { DATE: 1, INDICATOR: 2, URL: 0 });
   const bindings = Object.fromEntries(env.valueTypes.map(v => [v.name, [v.request, v.response]]));
@@ -90,11 +106,18 @@ check('hashes ignore line endings (a Windows checkout equals a Linux one)', () =
       fs.writeFileSync(path.join(root, 'registries', 'r.json'), `{${nl}"r": 1${nl}}${nl}`);
       fs.writeFileSync(path.join(root, 'criteria', 'c.sidecar.json'), `{${nl}"c": 1${nl}}${nl}`);
       fs.writeFileSync(path.join(root, 'criteria', 'ignored.md'), 'not a source');
+      fs.mkdirSync(path.join(root, 'parts', 'partI'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'parts', 'partI', 'index.json'), `{${nl}"p": 1${nl}}${nl}`);
+      fs.writeFileSync(path.join(root, 'parts', 'partI', 'README.md'), 'not a source');
       return root;
     };
     const a = hashEnrichment(enr('a', '\n')), b = hashEnrichment(enr('b', '\r\n'));
     assert.equal(a.sha256, b.sha256);
-    assert.equal(a.files, 2, 'only .json files under registries/ and criteria/ count');
+    assert.equal(a.files, 3, 'only .json files under registries/, criteria/ and parts/<part>/ count');
+
+    fs.writeFileSync(path.join(dir, 'b', 'parts', 'partI', 'index.json'), '{"p": 2}\n');
+    assert.notEqual(hashEnrichment(path.join(dir, 'b')).sha256, a.sha256, 'a change to a part changes the hash');
+    fs.writeFileSync(path.join(dir, 'b', 'parts', 'partI', 'index.json'), '{\r\n"p": 1\r\n}\r\n');
 
     fs.writeFileSync(path.join(dir, 'b', 'criteria', 'c.sidecar.json'), '{"c": 2}\n');
     assert.notEqual(hashEnrichment(path.join(dir, 'b')).sha256, a.sha256, 'a content change changes the hash');

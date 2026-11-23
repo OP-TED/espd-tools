@@ -24,13 +24,19 @@ export function hashFile(file) {
 
 /**
  * SHA-256 over the enrichment sources the compiler consumes: registries/*.json and
- * criteria/*.json, as sorted `relative/path\n<LF-normalised content>\n`.
+ * criteria/*.json and the .json files of each parts/<part> folder (when present), as sorted `relative/path\n<LF-normalised content>\n`.
  */
 export function hashEnrichment(enrichmentDir) {
   const files = [];
   for (const sub of ['registries', 'criteria']) {
     const dir = path.join(enrichmentDir, sub);
     for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.json')).sort()) files.push(`${sub}/${f}`);
+  }
+  const partsDir = path.join(enrichmentDir, 'parts');
+  if (fs.existsSync(partsDir)) {
+    for (const p of fs.readdirSync(partsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort()) {
+      for (const f of fs.readdirSync(path.join(partsDir, p)).filter(n => n.endsWith('.json')).sort()) files.push(`parts/${p}/${f}`);
+    }
   }
   const h = crypto.createHash('sha256');
   for (const rel of files) {
@@ -60,8 +66,9 @@ export function readVersions(codelistsDir) {
  * @param {object[]} p.entries   one per criterion: { key, id, code, tag?, part, leaves, repeatableBindings, valueTypes[], files{} }
  * @param {object} p.valueTypeRegistry  the value-types registry ({ valueTypes: { NAME: { requestXml?, responseXml? } } })
  * @param {string[]} p.registries  published registry paths
+ * @param {object[]} p.parts  the administrative parts: { part, manifest, sections: [{ id, schema, example, mapping, form }] }
  */
-export function buildEnvelope({ espdVersion, ublVersion, provenance, entries, valueTypeRegistry, registries }) {
+export function buildEnvelope({ espdVersion, ublVersion, provenance, entries, valueTypeRegistry, registries, parts }) {
   const criteria = [...entries]
     .map(e => ({ ...e, valueTypes: [...e.valueTypes].sort() }))
     .sort((a, b) => PART_ORDER.indexOf(a.part) - PART_ORDER.indexOf(b.part) || a.key.localeCompare(b.key));
@@ -72,6 +79,8 @@ export function buildEnvelope({ espdVersion, ublVersion, provenance, entries, va
     const def = valueTypeRegistry.valueTypes[name];
     return { name, request: !!def.requestXml, response: !!def.responseXml, usedBy: usage.get(name) ?? 0 };
   });
+
+  const orderedParts = [...parts].sort((a, b) => PART_ORDER.indexOf(a.part) - PART_ORDER.indexOf(b.part));
 
   const count = (pick) => criteria.filter(c => pick(c) != null).length;
   return {
@@ -86,9 +95,11 @@ export function buildEnvelope({ espdVersion, ublVersion, provenance, entries, va
       instanceDataFiles: criteria.length * 2,
       xmlMappingFiles: count(c => c.files.requestMapping) + count(c => c.files.responseMapping),
       compiledFiles: criteria.length,
+      partSections: orderedParts.reduce((n, p) => n + p.sections.length, 0),
     },
     criteria,
     valueTypes,
+    parts: orderedParts,
     registries: [...registries].sort(),
   };
 }
