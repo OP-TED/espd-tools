@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { readModelMetadata, verifyModelVersions } from './model-metadata.js'
+import { readModelMetadata, verifyModelVersions, espdCodeListIdentification, findStaleCodeListTags } from './model-metadata.js'
 import { exportCodeLists } from './export-code-lists.js'
 import { verifyExportedCodeLists } from './verify-export.js'
 
@@ -31,11 +31,11 @@ const enumObject = (id, name) => ({
   ea_guid: `{guid-${id}}`, Note: `${name} note`, Stereotype: 'codelist',
 })
 
-const tags = (id, { version = '5.0.0', canonical = 'https://github.com/OP-TED/ESPD-EDM/tree/v5.0.0/', longName = 'Thing' } = {}) => [
+const tags = (id, { version = '5.0.0', canonical = 'https://github.com/OP-TED/ESPD-EDM/tree/v5.0.0/', location = 'https://example.invalid/x.gc', longName = 'Thing' } = {}) => [
   { Object_ID: id, Property: 'Version', Value: version },
   { Object_ID: id, Property: 'CanonicalVersionUri', Value: canonical },
   { Object_ID: id, Property: 'CanonicalUri', Value: 'https://github.com/OP-TED/ESPD-EDM/' },
-  { Object_ID: id, Property: 'LocationUri', Value: 'https://example.invalid/x.gc' },
+  { Object_ID: id, Property: 'LocationUri', Value: location },
   { Object_ID: id, Property: 'LongName', Value: longName },
 ]
 
@@ -205,49 +205,54 @@ check('catches the real 5.0.0-alpha.2 case via --expect-version', () => {
   assert.match(problems[0], /declares espdVersion "5\.0\.0-alpha\.2" but the release being built is "5\.0\.0"/)
 })
 
-// The live defect: the model's own code lists said 5.0.0 while the document
-// stamp said 5.0.0-alpha.2. No expected version needed to see it.
-check('catches the real 5.0.0-alpha.2 case with no --expect-version at all', () => {
-  const db = buildModel({ espdVersion: '5.0.0-alpha.2' })
-  const problems = verifyModelVersions(db, readModelMetadata(db))
-  // 3 code lists x (Version mismatch + CanonicalVersionUri mismatch)
-  assert.equal(problems.length, 6)
-  assert.ok(problems.some(p => /declares Version "5\.0\.0" but the model version is "5\.0\.0-alpha\.2"/.test(p)),
-    problems.join('; '))
-})
-
 check('a matching --expect-version passes', () => {
   const db = buildModel()
   assert.deepEqual(verifyModelVersions(db, readModelMetadata(db), { expectedVersion: '5.0.0' }), [])
 })
 
-check('catches a code list whose Version drifted', () => {
-  const db = buildModel({ overrides: { 602: { version: '4.1.0' } } })
-  const problems = verifyModelVersions(db, readModelMetadata(db))
-  assert.equal(problems.length, 1)
-  assert.match(problems[0], /espd:BooleanGUIControlType" declares Version "4\.1\.0"/)
+// The code lists' own versions are derived from ESPDMetadata now, so a stale
+// per-code-list tagged value can no longer make the model inconsistent.
+check('stale code list tagged values do not fail the version check', () => {
+  const db = buildModel({ overrides: { 602: { version: '4.1.0' }, 601: { canonical: 'https://github.com/OP-TED/ESPD-EDM/tree/v4.1.0/' } } })
+  assert.deepEqual(verifyModelVersions(db, readModelMetadata(db)), [])
 })
 
-check('catches a code list with no Version tagged value', () => {
-  const db = buildModel({ overrides: { 603: { version: '' } } })
-  const problems = verifyModelVersions(db, readModelMetadata(db))
-  assert.ok(problems.some(p => /has no "Version" tagged value/.test(p)), problems.join('; '))
+// --- espdCodeListIdentification / findStaleCodeListTags -------------------------
+
+console.log('\nderived code list identification')
+
+check('derives Version, CanonicalVersionUri and LocationUri from the document version', () => {
+  assert.deepEqual(espdCodeListIdentification('EOIDType', '5.1.0'), {
+    version: '5.1.0',
+    canonicalVersionUri: 'https://github.com/OP-TED/ESPD-EDM/tree/v5.1.0/',
+    locationUri: 'https://raw.githubusercontent.com/OP-TED/ESPD-EDM/v5.1.0/codelists/EOIDType.gc',
+  })
 })
 
-check('catches a stale CanonicalVersionUri', () => {
-  const db = buildModel({ overrides: { 601: { canonical: 'https://github.com/OP-TED/ESPD-EDM/tree/v4.1.0/' } } })
-  const problems = verifyModelVersions(db, readModelMetadata(db))
-  assert.equal(problems.length, 1)
-  assert.match(problems[0], /does not carry the model version "v5\.0\.0"/)
+// The 5.0.0 model's tagged values, as committed, match the derived values.
+// Byte-identical output for 5.0.0 depends on this.
+check('derived values match what the 5.0.0 model declares today', () => {
+  const db = buildModel({ overrides: {
+    601: { location: 'https://raw.githubusercontent.com/OP-TED/ESPD-EDM/v5.0.0/codelists/ResponseDataType.gc' },
+    602: { location: 'https://raw.githubusercontent.com/OP-TED/ESPD-EDM/v5.0.0/codelists/BooleanGUIControlType.gc' },
+    603: { location: 'https://raw.githubusercontent.com/OP-TED/ESPD-EDM/v5.0.0/codelists/CriterionElementType.gc' },
+  } })
+  assert.deepEqual(findStaleCodeListTags(db, readModelMetadata(db)), [])
 })
 
-check('a v5.0.0 URI does not satisfy a 5.0.0-beta model (no prefix match)', () => {
-  const db = buildModel({ espdVersion: '5.0.0-beta' })
-  const problems = verifyModelVersions(db, readModelMetadata(db))
-  // 3 code lists x (Version mismatch + CanonicalVersionUri not carrying v5.0.0-beta)
-  assert.equal(problems.length, 6)
-  assert.ok(problems.some(p => /does not carry the model version "v5\.0\.0-beta"/.test(p)),
-    problems.join('; '))
+check('reports tagged values that disagree with the derived ones', () => {
+  const db = buildModel({ espdVersion: '5.1.0' })
+  const warnings = findStaleCodeListTags(db, readModelMetadata(db))
+  // 3 code lists x Version, CanonicalVersionUri, LocationUri still at 5.0.0
+  assert.equal(warnings.length, 9, warnings.join('; '))
+  assert.ok(warnings.some(w => /espd:BooleanGUIControlType" tagged value Version "5\.0\.0" is ignored; the export writes "5\.1\.0"/.test(w)),
+    warnings.join('; '))
+})
+
+check('a missing tagged value is not reported', () => {
+  const db = buildModel()
+  db.objectProperties = db.objectProperties.filter(p => !['Version', 'CanonicalVersionUri', 'LocationUri'].includes(p.Property))
+  assert.deepEqual(findStaleCodeListTags(db, readModelMetadata(db)), [])
 })
 
 check('external code lists are not held to the ESPD version', () => {
@@ -255,6 +260,7 @@ check('external code lists are not held to the ESPD version', () => {
   db.objects.push(enumObject(700, 'at-voc:country'))
   db.objectProperties.push(...tags(700, { version: '20250618-0', canonical: 'http://publications.europa.eu/resource/dataset/country/20250618-0', longName: 'country' }))
   assert.deepEqual(verifyModelVersions(db, readModelMetadata(db)), [])
+  assert.ok(!findStaleCodeListTags(db, readModelMetadata(db)).some(w => /at-voc/.test(w)))
 })
 
 // --- exportCodeLists: stamping and ordering -----------------------------------
@@ -290,6 +296,22 @@ const run = async () => {
 
   check('each entry carries the version from its own .gc', () => {
     first.codelistMetadata.codelists.forEach(c => assert.equal(c.version, '5.0.0'))
+  })
+
+  // Bumping only ESPDMetadata is enough: the per-code-list tagged values still
+  // say 5.0.0, and the .gc files must say 5.1.0 regardless.
+  const bumped = buildModel({ espdVersion: '5.1.0' })
+  const bumpedExport = await exportCodeLists(bumped, readModelMetadata(bumped))
+
+  check('a version bump in ESPDMetadata alone reaches every ESPD .gc', () => {
+    bumpedExport.internal.filter(r => r.success).forEach(r => {
+      const name = r.fileName.replace(/\.gc$/, '')
+      assert.match(r.content, /<Version>5\.1\.0<\/Version>/, r.fileName)
+      assert.match(r.content, /<CanonicalVersionUri>https:\/\/github\.com\/OP-TED\/ESPD-EDM\/tree\/v5\.1\.0\/<\/CanonicalVersionUri>/, r.fileName)
+      assert.ok(r.content.includes(`<LocationUri>https://raw.githubusercontent.com/OP-TED/ESPD-EDM/v5.1.0/codelists/${name}.gc</LocationUri>`), r.fileName)
+      assert.ok(!r.content.includes('5.0.0'), `${r.fileName} still mentions 5.0.0`)
+    })
+    bumpedExport.codelistMetadata.codelists.forEach(c => assert.equal(c.version, '5.1.0'))
   })
 
   // --- failures vs deliberate omissions ---------------------------------------
