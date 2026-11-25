@@ -2,7 +2,7 @@ import axios from 'axios'
 import { create, convert } from 'xmlbuilder2'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import { HttpProxyAgent } from 'http-proxy-agent'
-import { EXTERNAL_VOCABULARY_PREFIXES } from './model-metadata.js'
+import { EXTERNAL_VOCABULARY_PREFIXES, espdCodeListIdentification } from './model-metadata.js'
 
 // const LANGUAGE_CODES = [
 //   'bul', 'spa', 'ces', 'dan', 'deu', 'est', 'ell', 'eng',
@@ -380,7 +380,12 @@ async function exportCodeLists (db, metadata) {
     const shortName = fullNameInt[1]
     const longName = enumeration.longName
     try {
-      const xml = generateGcXml(enumeration)
+      // Version, CanonicalVersionUri and LocationUri come from the document
+      // version, not from per-code-list tagged values.
+      const xml = generateGcXml({
+        ...enumeration,
+        ...espdCodeListIdentification(shortName, metadata.espdVersion),
+      })
       const version = extractFromGcXml(xml, "Version")
 
       return {

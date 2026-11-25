@@ -27,6 +27,9 @@ const UBL_VERSION_TAG = 'ublVersion'
 // 5.0.0-alpha.2. Deliberately strict: "5.0" and "v5.0.0" are rejected, because
 // the value is copied verbatim into codelists.json, the .gc files and the
 // Maven coordinate, all of which need the same spelling.
+// Where the ESPD-maintained code lists are published, per release tag.
+const ESPD_EDM_REPOSITORY = 'OP-TED/ESPD-EDM'
+
 const ESPD_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
 const UBL_VERSION_PATTERN = /^\d+\.\d+$/
 
@@ -179,14 +182,10 @@ const readModelMetadata = (db, { elementName = METADATA_ELEMENT_NAME } = {}) => 
   }
 }
 
-// A CanonicalVersionUri such as
-// https://github.com/OP-TED/ESPD-EDM/tree/v5.0.0/ must carry the model version
-// as a whole path segment, so that "v5.0.0" does not satisfy a 5.0.0-beta model.
-const canonicalVersionUriMatches = (uri, espdVersion) =>
-  new RegExp(`/v${espdVersion.replace(/[.+*?^$()[\]{}|\\]/g, '\\$&')}(?:/|$)`).test(String(uri))
-
-// Cross-checks the versions embedded in the model against the document-level
-// version. Returns a list of human-readable problems; empty means consistent.
+// Checks the document-level version against the release being built. Returns a
+// list of human-readable problems; empty means consistent. The ESPD code lists
+// used to be cross-checked here too; their versions are now derived from the
+// document version, so they can no longer disagree with it.
 //
 // expectedVersion is the version the caller believes is being released (from a
 // release branch name or a tag). Supplying it turns the check into a gate: it
@@ -202,33 +201,40 @@ const verifyModelVersions = (db, metadata, { expectedVersion = null } = {}) => {
       `element in the conceptual model, or build the matching release`)
   }
 
+  return problems
+}
+
+// The versioned identification of an ESPD-maintained code list, derived from
+// the document version instead of being read from three EA tagged values per
+// code list. Those 21 values (7 code lists x Version, CanonicalVersionUri,
+// LocationUri) had to be edited by hand for every release and agree with
+// ESPDMetadata; now ESPDMetadata.espdVersion is the only place the version is
+// written. The shape is the one every 5.0.0 code list already uses, so a model
+// at 5.0.0 exports byte-identical files.
+const espdCodeListIdentification = (shortName, espdVersion) => ({
+  version: espdVersion,
+  canonicalVersionUri: `https://github.com/${ESPD_EDM_REPOSITORY}/tree/v${espdVersion}/`,
+  locationUri: `https://raw.githubusercontent.com/${ESPD_EDM_REPOSITORY}/v${espdVersion}/codelists/${shortName}.gc`,
+})
+
+// The per-code-list tagged values are no longer read, so a stale one cannot
+// reach a published file. They are still reported, so the model can be cleaned
+// up, but they never stop an export.
+const findStaleCodeListTags = (db, metadata) => {
+  const warnings = []
   listInternalEnumerations(db).forEach(enumObj => {
     const name = enumObj.Name
-    const version = readTaggedValue(db, enumObj.Object_ID, 'Version')
-    const canonicalVersionUri = readTaggedValue(db, enumObj.Object_ID, 'CanonicalVersionUri')
-
-    if (!version) {
-      problems.push(
-        `code list "${name}" has no "Version" tagged value, which would emit an ` +
-        `empty <Version> element in ${stripNamespace(name)}.gc`)
-    } else if (version !== espdVersion) {
-      problems.push(
-        `code list "${name}" declares Version "${version}" but the model version ` +
-        `is "${espdVersion}"`)
-    }
-
-    if (!canonicalVersionUri) {
-      problems.push(
-        `code list "${name}" has no "CanonicalVersionUri" tagged value, which ` +
-        `would emit an empty <CanonicalVersionUri> element in ${stripNamespace(name)}.gc`)
-    } else if (!canonicalVersionUriMatches(canonicalVersionUri, espdVersion)) {
-      problems.push(
-        `code list "${name}" has CanonicalVersionUri "${canonicalVersionUri}", ` +
-        `which does not carry the model version "v${espdVersion}"`)
+    const derived = espdCodeListIdentification(stripNamespace(name), metadata.espdVersion)
+    for (const [tag, key] of [['Version', 'version'], ['CanonicalVersionUri', 'canonicalVersionUri'], ['LocationUri', 'locationUri']]) {
+      const declared = readTaggedValue(db, enumObj.Object_ID, tag)
+      if (declared !== null && declared !== derived[key]) {
+        warnings.push(
+          `code list "${name}" tagged value ${tag} "${declared}" is ignored; ` +
+          `the export writes "${derived[key]}". Remove the tagged value from the model.`)
+      }
     }
   })
-
-  return problems
+  return warnings
 }
 
 export {
@@ -242,4 +248,6 @@ export {
   listInternalEnumerations,
   readModelMetadata,
   verifyModelVersions,
+  espdCodeListIdentification,
+  findStaleCodeListTags,
 }

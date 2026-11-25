@@ -8,7 +8,7 @@ import caporal from '@caporal/core'
 import { exportCriteria } from './export-criteria.js'
 import { exportCodeLists } from './export-code-lists.js'
 import { getUnrecognizedTypeWarnings } from './export-package.js'
-import { readModelMetadata, verifyModelVersions, METADATA_ELEMENT_NAME } from './model-metadata.js'
+import { readModelMetadata, verifyModelVersions, findStaleCodeListTags, METADATA_ELEMENT_NAME } from './model-metadata.js'
 import { verifyExportedCodeLists } from './verify-export.js'
 
 const { program } = caporal
@@ -96,6 +96,13 @@ const resolveVersions = (db, { expectedVersion = null, elementName = null } = {}
   }
 
   log(chalk.green(`✓ Model versions are consistent`))
+
+  const stale = findStaleCodeListTags(db, metadata)
+  if (stale.length > 0) {
+    log(chalk.yellow(`\n⚠ ${stale.length} code list tagged value(s) in the model are ignored:`))
+    stale.forEach(w => log(chalk.yellow(`  - ${w}`)))
+  }
+
   return metadata
 }
 
