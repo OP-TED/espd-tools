@@ -22,6 +22,8 @@ For every criterion that has a `<code>.sidecar.json` in the enrichment folder it
 3. validates every value type used against the value-type registry and `ResponseDataType.gc`,
 4. emits the per-criterion layers (below).
 
+The README of the published folder is rendered from `model-readme.template.md` (placeholders are filled from the envelope); edit that file to change what ESPD-EDM/model/README.md says.
+
 The administrative parts (I, II, VI) are not criteria and are not compiled: they are authored in
 `enrichment/parts/` and published verbatim, after a completeness check (`parts.mjs`).
 
