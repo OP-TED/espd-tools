@@ -21,9 +21,11 @@ const envelope = {
 let n = 0;
 const check = (name, fn) => { fn(); n++; console.log(`✓ ${name}`); };
 
-const render = () => {
+const render = (registries = {}) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'espd-readme-'));
   try {
+    if (Object.keys(registries).length) fs.mkdirSync(path.join(dir, 'registries'));
+    for (const [name, doc] of Object.entries(registries)) fs.writeFileSync(path.join(dir, 'registries', name), JSON.stringify(doc));
     publishReadme(dir, envelope);
     return fs.readFileSync(path.join(dir, 'README.md'), 'utf8');
   } finally {
@@ -48,6 +50,21 @@ check('the README documents the status, the use, the origin and the verification
   assert.match(text, /Known limitations/);
 });
 
+check('provisional registries are listed from their own status, confirmed ones are not', () => {
+  const text = render({
+    'b.json': { status: 'provisional', statusNote: 'Pending review of B.' },
+    'a.json': { status: 'provisional', statusNote: 'Pending review of A.' },
+    'c.json': { status: 'confirmed', statusNote: 'Agreed.' },
+    'd.json': { profiles: {} },
+  });
+  assert.match(text, /These registries are provisional now:\n  - `registries\/a\.json`: Pending review of A\.\n  - `registries\/b\.json`: Pending review of B\./, 'listed, sorted by file name');
+  assert.doesNotMatch(text, /c\.json|Agreed|d\.json/, 'confirmed and unmarked registries are not listed');
+});
+
+check('with no provisional registry (or no registries) the list says none', () => {
+  assert.match(render({ 'a.json': { status: 'confirmed' } }), /provisional now:\n  - none/);
+  assert.match(render(), /provisional now:\n  - none/);
+});
 check('an unknown placeholder in the template is an error', () => {
   const template = path.join(here, 'model-readme.template.md');
   const original = fs.readFileSync(template, 'utf8');

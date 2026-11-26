@@ -66,6 +66,22 @@ export function publishSchema(root) {
   fs.copyFileSync(schemaPath, path.join(dir, 'compiled-model.schema.json'));
 }
 
+/**
+ * The registries of the published folder that are still provisional, as a nested Markdown list for the
+ * README. A registry says so itself (status "provisional" and a statusNote), so the list cannot go stale
+ * when its status changes.
+ */
+function provisionalRegistriesList(root) {
+  const dir = path.join(root, 'registries');
+  const items = [];
+  if (fs.existsSync(dir)) {
+    for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.json')).sort()) {
+      const doc = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      if (doc.status === 'provisional') items.push(`  - \`registries/${f}\`: ${doc.statusNote ?? '(no note)'}`);
+    }
+  }
+  return items.length ? items.join('\n') : '  - none';
+}
 const readmeTemplate = path.join(path.dirname(fileURLToPath(import.meta.url)), 'model-readme.template.md');
 
 /**
@@ -76,6 +92,7 @@ const readmeTemplate = path.join(path.dirname(fileURLToPath(import.meta.url)), '
 export function publishReadme(root, envelope) {
   const c = envelope.counts;
   const values = {
+    provisionalRegistries: provisionalRegistriesList(root),
     espdVersion: envelope.espdVersion,
     ublVersion: envelope.ublVersion,
     envelopeVersion: envelope.envelopeVersion,
