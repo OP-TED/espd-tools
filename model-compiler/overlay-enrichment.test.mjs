@@ -8,37 +8,26 @@ import assert from 'node:assert/strict';
 import { readStructuralCore, leavesOf } from './read-structural-core.mjs';
 import { overlayEnrichment } from './overlay-enrichment.mjs';
 import { edmPath, criteriaDir } from './config.mjs';
+import { skipReason, checkWith, expectThrowWith, COMPILER_INPUTS } from './testkit.mjs';
+
+const skip = skipReason(COMPILER_INPUTS);
 
 const sourcePath = edmPath();
 
 const CODE = 'slc-stand-to-spec-avg';
-const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
-const core = readStructuralCore(edm, CODE);
-const baseSidecar = JSON.parse(
-  fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8')
-);
+const { edm, core, baseSidecar } = skip ? {} : (() => {
+  const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+  const core = readStructuralCore(edm, CODE);
+  const baseSidecar = JSON.parse(
+    fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8')
+  );
+  return { edm, core, baseSidecar };
+})();
 
 const clone = v => structuredClone(v);
 
-let failures = 0;
-function check(name, fn) {
-  try { fn(); console.log(`\u2713 ${name}`); }
-  catch (err) { failures++; console.error(`\u2717 ${name}: ${err.message}`); }
-}
-function expectThrow(name, fn, snippet) {
-  try {
-    fn();
-    failures++;
-    console.error(`\u2717 ${name}: expected an error but none was thrown`);
-  } catch (err) {
-    if (snippet && !err.message.includes(snippet)) {
-      failures++;
-      console.error(`\u2717 ${name}: error missing '${snippet}' (got: ${err.message.split('\n')[0]})`);
-    } else {
-      console.log(`\u2713 ${name}`);
-    }
-  }
-}
+const check = checkWith(skip);
+const expectThrow = expectThrowWith(skip);
 
 // Happy path: full overlay succeeds and every leaf is enriched.
 check('happy path: all 17 leaves enriched with id + instanceBinding', () => {
@@ -117,9 +106,3 @@ expectThrow('fail-fast: sidecar/core code mismatch', () => {
   s.criterion.code = 'wrong-code';
   overlayEnrichment(core, s);
 }, 'does not match core code');
-
-if (failures) {
-  console.error(`\n${failures} test(s) failed.`);
-  process.exit(1);
-}
-console.log('\nAll overlay-enrichment tests passed.');

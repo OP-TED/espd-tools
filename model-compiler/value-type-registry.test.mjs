@@ -10,23 +10,18 @@ import {
   validateCriterionValueTypes, parseGenericode,
 } from './value-type-registry.mjs';
 import { edmPath, codelistFile } from './config.mjs';
+import { skipReason, checkWith, expectThrowWith, COMPILER_INPUTS } from './testkit.mjs';
+
+const skip = skipReason(COMPILER_INPUTS);
 
 const sourcePath = edmPath();
-const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+const { edm } = skip ? {} : (() => {
+  const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+  return { edm };
+})();
 
-let failures = 0;
-function check(name, fn) {
-  try { fn(); console.log(`\u2713 ${name}`); }
-  catch (err) { failures++; console.error(`\u2717 ${name}: ${err.message.split('\n')[0]}`); }
-}
-function expectThrow(name, fn, snippet) {
-  try { fn(); failures++; console.error(`\u2717 ${name}: expected error, none thrown`); }
-  catch (err) {
-    if (snippet && !err.message.includes(snippet)) {
-      failures++; console.error(`\u2717 ${name}: error missing '${snippet}' (got: ${err.message.split('\n')[0]})`);
-    } else console.log(`\u2713 ${name}`);
-  }
-}
+const check = checkWith(skip);
+const expectThrow = expectThrowWith(skip);
 
 // Registry validates cleanly against ResponseDataType.gc, with correct provenance.
 check('registry validates against ResponseDataType.gc; provenance = 5.0.0', () => {
@@ -72,6 +67,3 @@ check('genericode parser extracts ACTIVE rows', () => {
     codelistFile('ResponseDataType.gc'), 'utf8')) };
   assert.equal(gcRows.get('INDICATOR')?.get('status'), 'ACTIVE');
 });
-
-if (failures) { console.error(`\n${failures} test(s) failed.`); process.exit(1); }
-console.log('\nAll value-type-registry tests passed.');

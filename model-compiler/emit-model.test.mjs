@@ -8,17 +8,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadEdm, loadSidecar, compile, emitModel } from './compile.mjs';
 import { edmPath } from './config.mjs';
+import { skipReason, COMPILER_INPUTS } from './testkit.mjs';
 
 const code = 'slc-stand-to-gen';
-const edm = loadEdm(edmPath());
-const { compiled, registry } = compile(edm, code, loadSidecar(code));
+const skip = skipReason(COMPILER_INPUTS);
+const { compiled, registry } = skip ? {} : compile(loadEdm(edmPath()), code, loadSidecar(code));
 
 const inTempDir = (fn) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'espd-emit-'));
   try { return fn(root); } finally { fs.rmSync(root, { recursive: true, force: true }); }
 };
 
-test('a mapping that cannot be generated fails the criterion, with the cause and the criterion named', () => {
+test('a mapping that cannot be generated fails the criterion, with the cause and the criterion named', { skip }, () => {
   inTempDir((root) => {
     const boom = new Error('unsupported shape');
     assert.throws(
@@ -32,7 +33,7 @@ test('a mapping that cannot be generated fails the criterion, with the cause and
   });
 });
 
-test('a criterion that maps writes both mappings and lists them', () => {
+test('a criterion that maps writes both mappings and lists them', { skip }, () => {
   inTempDir((root) => {
     const { files } = emitModel(code, compiled, registry, { root, partId: 'IV' });
     assert.equal(files.requestMapping, `xml-mapping/${code}.request.mapping.json`);

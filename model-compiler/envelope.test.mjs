@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { buildEnvelope, validateEnvelope, hashFile, hashEnrichment, readVersions } from './envelope.mjs';
+import { check } from './testkit.mjs';
 
 const sha = 'a'.repeat(64);
 const provenance = {
@@ -34,9 +35,6 @@ const defaultParts = [partEntry('VI', ['A']), partEntry('I', ['A', 'B', 'C'])];
 const make = (entries, parts = defaultParts) => buildEnvelope({
   espdVersion: '5.0.0', ublVersion: '2.4', provenance, entries, valueTypeRegistry, registries: ['registries/b.json', 'registries/a.json'], parts,
 });
-
-let n = 0;
-const check = (name, fn) => { fn(); n++; console.log(`✓ ${name}`); };
 
 check('a built envelope conforms to the schema', () => {
   const env = make([entry('slc-b', 'IV', ['INDICATOR', 'DATE']), entry('exg-a', 'III', ['INDICATOR'])]);
@@ -139,5 +137,3 @@ check('versions are read from codelists.json, and a missing or incomplete file i
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
-
-console.log(`\nAll ${n} envelope tests passed.`);

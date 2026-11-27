@@ -10,12 +10,13 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { configure } from './config.mjs';
 import { checkPart, listParts, publishParts } from './parts.mjs';
-
-let n = 0;
-const check = (name, fn) => { fn(); n++; console.log(`✓ ${name}`); };
+import { after } from 'node:test';
+import { check } from './testkit.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'espd-parts-'));
-try {
+// The checks run after this module has been evaluated, so the folder is removed by a hook, not by a finally.
+after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+{
   const enrichment = path.join(tmp, 'enrichment');
   const dir = path.join(enrichment, 'parts', 'partI');
   const write = (name, value) => fs.writeFileSync(path.join(dir, name), typeof value === 'string' ? value : JSON.stringify(value, null, 2));
@@ -116,8 +117,4 @@ try {
     fs.rmSync(path.join(enrichment, 'parts'), { recursive: true });
     assert.throws(() => publishParts(out), /no administrative parts found/);
   });
-} finally {
-  fs.rmSync(tmp, { recursive: true, force: true });
 }
-
-console.log(`\nAll ${n} parts tests passed.`);

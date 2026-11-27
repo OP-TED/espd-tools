@@ -10,13 +10,15 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { edmPath, enrichmentDir, codelistsDir } from './config.mjs';
+import { skipReason, COMPILER_INPUTS } from './testkit.mjs';
 
 const build = path.join(path.dirname(fileURLToPath(import.meta.url)), 'build.mjs');
+const skip = skipReason(COMPILER_INPUTS);
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'espd-build-'));
 after(() => fs.rmSync(work, { recursive: true, force: true }));
 
 const enrichment = path.join(work, 'enrichment');
-fs.cpSync(enrichmentDir(), enrichment, { recursive: true, filter: (src) => !src.split(path.sep).includes('node_modules') });
+if (!skip) fs.cpSync(enrichmentDir(), enrichment, { recursive: true, filter: (src) => !src.split(path.sep).includes('node_modules') });
 const out = path.join(work, 'out');
 
 const run = () => spawnSync(process.execPath, [build, '--out', out, '--edm', edmPath(), '--enrichment', enrichment, '--codelists', codelistsDir()], { encoding: 'utf8' });
@@ -32,7 +34,7 @@ const seedPreviousOutput = () => {
   fs.writeFileSync(path.join(out, 'notes.txt'), 'not the compiler\'s');
 };
 
-test('a failed full run leaves the previous output untouched and no staging folder behind', () => {
+test('a failed full run leaves the previous output untouched and no staging folder behind', { skip }, () => {
   seedPreviousOutput();
   // Break one sidecar: a value leaf without its entry fails the overlay.
   const sidecarFile = path.join(enrichment, 'criteria', 'slc-stand-to-gen.sidecar.json');
@@ -53,7 +55,7 @@ test('a failed full run leaves the previous output untouched and no staging fold
   fs.writeFileSync(sidecarFile, original);
 });
 
-test('a successful full run replaces what the compiler owns and leaves other files alone', () => {
+test('a successful full run replaces what the compiler owns and leaves other files alone', { skip }, () => {
   const result = run();
   assert.equal(result.status, 0, result.stderr.slice(-600));
 

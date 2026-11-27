@@ -150,9 +150,28 @@ npm ci
 npm test
 ```
 
-These are the tests that need only the compiler's own inputs (the generators, the envelope).
+The tests run on `node --test`, and every case is reported on its own. Most of them need real inputs:
+the EA export, the enrichment folder and the shipped code lists, and a few the Schematron checkout
+(`encoding-profile`, `codelist-attributes` and the CVA check of `codelist-governance`). They are found the
+way the compiler finds them (`config.mjs`: the sibling-checkout layout, or `ESPD_EDM_JSON`,
+`ESPD_ENRICHMENT_DIR`, `ESPD_CODELISTS_DIR` and `ESPD_SCHEMATRON_ROOT`).
+
+- **Run by hand**, a test whose input is missing is skipped, and says which input is missing and which variable
+  sets it. The tests that need no input (the envelope, the parts, the README, ordering, finding a criterion, the LF helpers) always run.
+- **With `ESPD_REQUIRE_INPUTS=1`** a missing input is a failure. CI sets it, so a misconfigured checkout cannot
+  pass by skipping everything.
+
+`.github/workflows/model-compiler-tests.yml` runs them on every change to `model-compiler/`: it checks out
+espd-conceptual-model (the enrichment), ESPD-EDM (`criterion/espd-edm.json` and the code lists) and
+espd-validation-schematron next to this repository and sets the variables above. Until the enrichment is on
+`release/5.0.0` of espd-conceptual-model, it checks out that pull request's branch; see the TODO in the workflow.
+
+A new test file that needs inputs declares them with `skipReason([...])` from `testkit.mjs` and registers its
+cases with `checkWith(skip)`; build anything that reads an input inside the case or behind `skip`, not at the
+top of the file, so that a skipped file still loads.
+
 Tests that run the generated mapping specs through the mapping engine, and tests of the demo's UI
-generation, stay in `espd-demo`.
+generation, stay in `espd-demo` (see "Open TODOs").
 
 ## Status
 

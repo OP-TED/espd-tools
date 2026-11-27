@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { enrichmentFile } from './config.mjs';
 import { codelistPath, readCodelistCodes } from './read-codelist.mjs';
+import { check, checkWith, skipReason } from './testkit.mjs';
 
 /**
  * Problems of one schema node that carries `$codelist`. `entry` is its governance entry (or undefined),
@@ -58,8 +59,8 @@ export function checkCodelistField(node, entry, gcCodes) {
   return problems;
 }
 
-let n = 0;
-const check = (name, fn) => { fn(); n++; console.log(`✓ ${name}`); };
+const skip = skipReason(['enrichment', 'codelists']);
+const checkInputs = checkWith(skip);
 
 // --- the rule itself, on synthetic input ---------------------------------------------------------------
 const entry = (over = {}) => ({ gc: 'X.gc', schematronValidated: true, inlineEnum: true, ...over });
@@ -101,29 +102,32 @@ check('the implementer-choice marker is true only for an inlined list that is no
 });
 
 // --- the real parts -------------------------------------------------------------------------------------
-const { codelists } = JSON.parse(fs.readFileSync(enrichmentFile('registries', 'codelist-governance.json'), 'utf8'));
-const byName = new Map();
-for (const [name, e] of Object.entries(codelists)) for (const alias of [name, ...(e.aliases ?? [])]) byName.set(alias.toLowerCase(), e);
+const { byName, fields, partsDir, codelists } = skip ? {} : (() => {
+  const { codelists } = JSON.parse(fs.readFileSync(enrichmentFile('registries', 'codelist-governance.json'), 'utf8'));
+  const byName = new Map();
+  for (const [name, e] of Object.entries(codelists)) for (const alias of [name, ...(e.aliases ?? [])]) byName.set(alias.toLowerCase(), e);
 
-const fields = []; // { where, node }
-const partsDir = enrichmentFile('parts');
-for (const part of fs.readdirSync(partsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort()) {
-  for (const file of fs.readdirSync(path.join(partsDir, part)).filter(f => f.endsWith('.schema.json')).sort()) {
-    const schema = JSON.parse(fs.readFileSync(path.join(partsDir, part, file), 'utf8'));
-    const walk = (node, trail) => {
-      if (!node || typeof node !== 'object') return;
-      if (typeof node.$codelist === 'string') fields.push({ where: `parts/${part}/${file} ${trail.join('.')}`, node });
-      for (const [k, v] of Object.entries(node)) walk(v, [...trail, k]);
-    };
-    walk(schema, []);
+  const fields = []; // { where, node }
+  const partsDir = enrichmentFile('parts');
+  for (const part of fs.readdirSync(partsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort()) {
+    for (const file of fs.readdirSync(path.join(partsDir, part)).filter(f => f.endsWith('.schema.json')).sort()) {
+      const schema = JSON.parse(fs.readFileSync(path.join(partsDir, part, file), 'utf8'));
+      const walk = (node, trail) => {
+        if (!node || typeof node !== 'object') return;
+        if (typeof node.$codelist === 'string') fields.push({ where: `parts/${part}/${file} ${trail.join('.')}`, node });
+        for (const [k, v] of Object.entries(node)) walk(v, [...trail, k]);
+      };
+      walk(schema, []);
+    }
   }
-}
+  return { byName, fields, partsDir, codelists };
+})();
 
-check('the parts have code list fields to check', () => {
+checkInputs('the parts have code list fields to check', () => {
   assert.ok(fields.length >= 5, `found only ${fields.length} $codelist fields in ${partsDir}`);
 });
 
-check('every code list field of the parts agrees with its .gc and the governance registry', () => {
+checkInputs('every code list field of the parts agrees with its .gc and the governance registry', () => {
   const problems = [];
   for (const { where, node } of fields) {
     const e = byName.get(node.$codelist.toLowerCase());
@@ -137,5 +141,3 @@ check('every code list field of the parts agrees with its .gc and the governance
   }
   assert.deepEqual(problems, []);
 });
-
-console.log(`\nAll ${n} parts-codelists tests passed.`);

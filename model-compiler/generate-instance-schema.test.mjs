@@ -12,30 +12,32 @@ import { overlayEnrichment } from './overlay-enrichment.mjs';
 import { loadValidatedRegistry } from './value-type-registry.mjs';
 import { generateInstanceSchema, generateExample } from './generate-instance-schema.mjs';
 import { edmPath, criteriaDir } from './config.mjs';
+import { skipReason, checkWith, COMPILER_INPUTS } from './testkit.mjs';
+
+const skip = skipReason(COMPILER_INPUTS);
 
 const sourcePath = edmPath();
-const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
-const CODE = 'slc-stand-to-spec-avg';
+const { edm, CODE, core, sidecar, criterion, hints, baselineSchema, schema, ajv, validate, registry } = skip ? {} : (() => {
+  const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+  const CODE = 'slc-stand-to-spec-avg';
 
-const core = readStructuralCore(edm, CODE);
-const sidecar = JSON.parse(fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8'));
-const criterion = overlayEnrichment(core, sidecar);
-const { registry } = loadValidatedRegistry();
-const hints = JSON.parse(fs.readFileSync(path.join(criteriaDir(), `${CODE}.hints.json`), 'utf8'));
-// Baseline (no hints) and refined (with hints) schemas. Distinct outputIds give
-// distinct $ids so Ajv can compile both in one instance ($id derives from
-// outputId, the per-criterion schema filename stem).
-const baselineSchema = generateInstanceSchema(criterion, registry, { partId: 'IV', outputId: `${CODE}-baseline` });
-const schema = generateInstanceSchema(criterion, registry, { partId: 'IV', outputId: CODE, hints });
+  const core = readStructuralCore(edm, CODE);
+  const sidecar = JSON.parse(fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8'));
+  const criterion = overlayEnrichment(core, sidecar);
+  const { registry } = loadValidatedRegistry();
+  const hints = JSON.parse(fs.readFileSync(path.join(criteriaDir(), `${CODE}.hints.json`), 'utf8'));
+  // Baseline (no hints) and refined (with hints) schemas. Distinct outputIds give
+  // distinct $ids so Ajv can compile both in one instance ($id derives from
+  // outputId, the per-criterion schema filename stem).
+  const baselineSchema = generateInstanceSchema(criterion, registry, { partId: 'IV', outputId: `${CODE}-baseline` });
+  const schema = generateInstanceSchema(criterion, registry, { partId: 'IV', outputId: CODE, hints });
 
-const ajv = new Ajv({ allErrors: true, strict: false });
-const validate = ajv.compile(schema);
+  const ajv = new Ajv({ allErrors: true, strict: false });
+  const validate = ajv.compile(schema);
+  return { edm, CODE, core, sidecar, criterion, hints, baselineSchema, schema, ajv, validate, registry };
+})();
 
-let failures = 0;
-function check(name, fn) {
-  try { fn(); console.log(`\u2713 ${name}`); }
-  catch (err) { failures++; console.error(`\u2717 ${name}: ${err.message.split('\n')[0]}`); }
-}
+const check = checkWith(skip);
 
 check('schema compiles under Ajv 2020', () => {
   assert.equal(typeof validate, 'function');
@@ -108,7 +110,7 @@ check('a malformed instance (wrong type for numberOfYears) is rejected', () => {
 // Complete, otherwise-valid requirement side; each test perturbs ONE field so
 // the assertion isolates the constraint under test.
 const goodReq = () => ({ lotIdentifiers: ['LOT-0000'], numberOfYears: 3, businessDomain: 'IT', minimumAmount: { value: 1, currency: 'EUR' } });
-const vBaseline = ajv.compile(baselineSchema);
+const vBaseline = skip ? undefined : ajv.compile(baselineSchema);
 
 check('4.3.1 derived: lotIdentifiers minItems:1 comes from 1..n cardinality (no hint needed)', () => {
   const inst = { partIV: { selectionCriteria: { [CODE]: { requirement: { ...goodReq(), lotIdentifiers: [] } } } } };
@@ -170,6 +172,3 @@ check('generated example validates against the refined schema', () => {
   assert.ok(Array.isArray(req.lotIdentifiers) && req.lotIdentifiers.length >= 1);
   assert.ok(Number.isInteger(req.numberOfYears));
 });
-
-if (failures) { console.error(`\n${failures} test(s) failed.`); process.exit(1); }
-console.log('\nAll instance-schema generator tests passed.');

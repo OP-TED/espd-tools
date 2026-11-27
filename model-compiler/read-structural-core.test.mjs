@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { readStructuralCore, leavesOf } from './read-structural-core.mjs';
 import { edmPath } from './config.mjs';
+import { skipReason, checkWith } from './testkit.mjs';
 
 const sourcePath = edmPath();
 
@@ -32,12 +33,13 @@ function condense(node) {
   return node;
 }
 
-let failures = 0;
-const full = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
-const condensed = condense(full);
+const skip = skipReason(['edm']);
+const check = checkWith(skip);
+const full = skip ? undefined : JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+const condensed = skip ? undefined : condense(full);
 
 for (const code of CODES) {
-  try {
+  check(`lean-consumption guarantee holds: ${code}`, () => {
     const fromFull = readStructuralCore(full, code);
     const fromCondensed = readStructuralCore(condensed, code);
 
@@ -50,16 +52,5 @@ for (const code of CODES) {
     for (const banned of ['xmlElementName', 'xmlChildren', 'responsepath', 'contentpath']) {
       assert.ok(!serialized.includes(banned), `core must not contain ${banned}`);
     }
-
-    console.log(`\u2713 lean-consumption guarantee holds: ${code} (${leavesOf(fromFull).length} leaves)`);
-  } catch (err) {
-    failures++;
-    console.error(`\u2717 ${code}: ${err.message}`);
-  }
+  });
 }
-
-if (failures) {
-  console.error(`\n${failures} test(s) failed.`);
-  process.exit(1);
-}
-console.log('\nAll structural-core reader tests passed.');

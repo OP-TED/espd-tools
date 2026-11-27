@@ -11,30 +11,32 @@ import { overlayEnrichment } from './overlay-enrichment.mjs';
 import { loadValidatedRegistry } from './value-type-registry.mjs';
 import { generateRequestMapping } from './generate-request-mapping.mjs';
 import { edmPath, criteriaDir } from './config.mjs';
+import { skipReason, checkWith, COMPILER_INPUTS } from './testkit.mjs';
+
+const skip = skipReason(COMPILER_INPUTS);
 
 const sourcePath = edmPath();
-const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
-const CODE = 'slc-stand-to-spec-avg';
+const { edm, CODE, core, sidecar, criterion, spec, all, byFrom, registry, walk } = skip ? {} : (() => {
+  const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+  const CODE = 'slc-stand-to-spec-avg';
 
-const core = readStructuralCore(edm, CODE);
-const sidecar = JSON.parse(fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8'));
-const criterion = overlayEnrichment(core, sidecar);
-const { registry } = loadValidatedRegistry();
-const spec = generateRequestMapping(criterion, registry);
+  const core = readStructuralCore(edm, CODE);
+  const sidecar = JSON.parse(fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8'));
+  const criterion = overlayEnrichment(core, sidecar);
+  const { registry } = loadValidatedRegistry();
+  const spec = generateRequestMapping(criterion, registry);
 
-// Collect every { element, from, const, fromItem, type } leaf across the structure.
-function* walk(node, pathStr = node.element) {
-  yield { pathStr, node };
-  for (const c of node.children ?? []) yield* walk(c, `${pathStr}/${c.element}`);
-}
-const all = [...walk(spec.rules[0].structure)];
-const byFrom = new Map(all.filter(x => x.node.from).map(x => [x.node.from, x.node]));
+  // Collect every { element, from, const, fromItem, type } leaf across the structure.
+  function* walk(node, pathStr = node.element) {
+    yield { pathStr, node };
+    for (const c of node.children ?? []) yield* walk(c, `${pathStr}/${c.element}`);
+  }
+  const all = [...walk(spec.rules[0].structure)];
+  const byFrom = new Map(all.filter(x => x.node.from).map(x => [x.node.from, x.node]));
+  return { edm, CODE, core, sidecar, criterion, spec, all, byFrom, registry, walk };
+})();
 
-let failures = 0;
-function check(name, fn) {
-  try { fn(); console.log(`\u2713 ${name}`); }
-  catch (err) { failures++; console.error(`\u2717 ${name}: ${err.message.split('\n')[0]}`); }
-}
+const check = checkWith(skip);
 
 check('target root is QualificationApplicationRequest', () => {
   assert.equal(spec.target.root, 'QualificationApplicationRequest');
@@ -121,6 +123,3 @@ check('every data-bound node resolves to a requirement instance path', () => {
     assert.ok(fromPath.includes('.requirement.'), `request value must bind to requirement side: ${fromPath}`);
   }
 });
-
-if (failures) { console.error(`\n${failures} test(s) failed.`); process.exit(1); }
-console.log('\nAll request-mapping generator tests passed.');

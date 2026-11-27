@@ -10,6 +10,7 @@ import { configure, enrichmentDir } from './config.mjs';
 import { publishRegistries, publishSchema, REGISTRY_FILES } from './publish.mjs';
 import { readLf, writeLf, copyLf } from './lf.mjs';
 import { schemaPath } from './envelope.mjs';
+import { skipReason } from './testkit.mjs';
 
 const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'espd-lf-'));
 const hasCr = (file) => fs.readFileSync(file, 'utf8').includes('\r');
@@ -45,7 +46,7 @@ test('the envelope schema is published with LF, also when its source has CRLF', 
   }
 });
 
-test('registries checked out with CRLF are published with LF', () => {
+test('registries checked out with CRLF are published with LF', { skip: skipReason(['enrichment']) }, () => {
   const work = tmpDir();
   try {
     // A copy of the real registries, converted to CRLF as a Windows checkout would have them.

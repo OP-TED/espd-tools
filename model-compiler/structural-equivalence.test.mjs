@@ -13,32 +13,26 @@ import { readStructuralCore } from './read-structural-core.mjs';
 import { overlayEnrichment } from './overlay-enrichment.mjs';
 import { assertStructuralEquivalence, projectCompiled } from './structural-equivalence.mjs';
 import { edmPath, criteriaDir } from './config.mjs';
+import { skipReason, checkWith, expectThrowWith, COMPILER_INPUTS } from './testkit.mjs';
+
+const skip = skipReason(COMPILER_INPUTS);
 
 const sourcePath = edmPath();
 
 const CODE = 'slc-stand-to-spec-avg';
-const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
-const core = readStructuralCore(edm, CODE);
-const sidecar = JSON.parse(
-  fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8')
-);
-const compiled = overlayEnrichment(core, sidecar);
+const { edm, core, sidecar, compiled } = skip ? {} : (() => {
+  const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+  const core = readStructuralCore(edm, CODE);
+  const sidecar = JSON.parse(
+    fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8')
+  );
+  const compiled = overlayEnrichment(core, sidecar);
+  return { edm, core, sidecar, compiled };
+})();
 
 const clone = v => structuredClone(v);
-let failures = 0;
-function check(name, fn) {
-  try { fn(); console.log(`\u2713 ${name}`); }
-  catch (err) { failures++; console.error(`\u2717 ${name}: ${err.message.split('\n')[0]}`); }
-}
-function expectThrow(name, fn, snippet) {
-  try { fn(); failures++; console.error(`\u2717 ${name}: expected error, none thrown`); }
-  catch (err) {
-    if (snippet && !err.message.includes(snippet)) {
-      failures++;
-      console.error(`\u2717 ${name}: error missing '${snippet}' (got: ${err.message.split('\n')[0]})`);
-    } else console.log(`\u2713 ${name}`);
-  }
-}
+const check = checkWith(skip);
+const expectThrow = expectThrowWith(skip);
 
 // Pass: the enriched C31 criterion is structurally equivalent to the EA source.
 check('C31 passes the structural-equivalence gate', () => {
@@ -79,9 +73,3 @@ expectThrow('added phantom child is rejected', () => {
 expectThrow('missing criterion fails', () => {
   assertStructuralEquivalence(edm, 'no-such-criterion', compiled);
 }, 'absent from espd-edm.json');
-
-if (failures) {
-  console.error(`\n${failures} test(s) failed.`);
-  process.exit(1);
-}
-console.log('\nAll structural-equivalence tests passed.');

@@ -13,26 +13,29 @@ import {
   loadEncodingProfile, validateEncodingProfile, encodeNode, profileKind,
 } from './encoding-profile.mjs';
 import { edmPath, criteriaDir } from './config.mjs';
+import { skipReason, checkWith, COMPILER_INPUTS } from './testkit.mjs';
+
+// loadValidatedCodelistProfile() checks the profile against the Schematron, so that checkout is an input too.
+const skip = skipReason([...COMPILER_INPUTS, 'schematron']);
 
 const sourcePath = edmPath();
-const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
-const CODE = 'slc-stand-to-spec-avg';
+const { edm, CODE, core, sidecar, criterion, profile, leaves, leafById, registry, codelistProfile } = skip ? {} : (() => {
+  const edm = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+  const CODE = 'slc-stand-to-spec-avg';
 
-const core = readStructuralCore(edm, CODE);
-const sidecar = JSON.parse(fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8'));
-const criterion = overlayEnrichment(core, sidecar);
-const profile = loadEncodingProfile();
-const { registry } = loadValidatedRegistry();
-const { profile: codelistProfile } = loadValidatedCodelistProfile();
+  const core = readStructuralCore(edm, CODE);
+  const sidecar = JSON.parse(fs.readFileSync(path.join(criteriaDir(), `${CODE}.sidecar.json`), 'utf8'));
+  const criterion = overlayEnrichment(core, sidecar);
+  const profile = loadEncodingProfile();
+  const { registry } = loadValidatedRegistry();
+  const { profile: codelistProfile } = loadValidatedCodelistProfile();
 
-const leaves = leavesOf(criterion);
-const leafById = Object.fromEntries(leaves.map(l => [l.id, l]));
+  const leaves = leavesOf(criterion);
+  const leafById = Object.fromEntries(leaves.map(l => [l.id, l]));
+  return { edm, CODE, core, sidecar, criterion, profile, leaves, leafById, registry, codelistProfile };
+})();
 
-let failures = 0;
-function check(name, fn) {
-  try { fn(); console.log(`\u2713 ${name}`); }
-  catch (err) { failures++; console.error(`\u2717 ${name}: ${err.message.split('\n')[0]}`); }
-}
+const check = checkWith(skip);
 
 check('profile is structurally valid (kinds + sameAs)', () => {
   assert.ok(validateEncodingProfile(profile));
@@ -92,6 +95,3 @@ check('requirement leaf on response side has no value child (binding absent)', (
   const valueChildren = enc.children.filter(c => !['cbc:ID','cbc:Name','cbc:Description','cbc:TypeCode','cbc:ValueDataTypeCode'].includes(c.element));
   assert.equal(valueChildren.length, 0, 'expected no value child on response side for MINIMUM_AMOUNT');
 });
-
-if (failures) { console.error(`\n${failures} test(s) failed.`); process.exit(1); }
-console.log('\nAll encoding-profile tests passed.');

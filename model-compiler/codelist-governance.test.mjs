@@ -22,13 +22,18 @@ import { loadEdm, loadSidecar, listModeledCodes, compile } from './compile.mjs';
 import { generateInstanceSchema } from './generate-instance-schema.mjs';
 import { edmPath, enrichmentFile, codelistsDir, schematronRoot } from './config.mjs';
 import { codelistPath, gcFileForCodelist, readCodelistCodes } from './read-codelist.mjs';
+import { skipReason, checkWith } from './testkit.mjs';
 
-const { codelists } = JSON.parse(fs.readFileSync(enrichmentFile('registries', 'codelist-governance.json'), 'utf8'));
-const byName = new Map(); // lower-case name or alias -> [canonical name, entry]
-for (const [name, e] of Object.entries(codelists)) for (const n of [name, ...(e.aliases ?? [])]) byName.set(n.toLowerCase(), [name, e]);
+const skip = skipReason(['edm', 'enrichment', 'codelists']);
 
-let n = 0;
-const check = (name, fn) => { fn(); n++; console.log(`✓ ${name}`); };
+const { byName, codelists } = skip ? {} : (() => {
+  const { codelists } = JSON.parse(fs.readFileSync(enrichmentFile('registries', 'codelist-governance.json'), 'utf8'));
+  const byName = new Map(); // lower-case name or alias -> [canonical name, entry]
+  for (const [name, e] of Object.entries(codelists)) for (const n of [name, ...(e.aliases ?? [])]) byName.set(n.toLowerCase(), [name, e]);
+  return { byName, codelists };
+})();
+
+const check = checkWith(skip);
 
 check('every gc file exists, and an unshipped list resolves to no .gc', () => {
   for (const [name, e] of Object.entries(codelists)) {
@@ -57,8 +62,9 @@ check('excludedCodes are codes the .gc really contains', () => {
 });
 
 const CVA = path.join(schematronRoot(), 'common', 'cva', '01-ESPD-codelist-values.cva');
-if (fs.existsSync(CVA)) {
-  check('`schematronValidated` matches the CVA ValueList declarations', () => {
+const cvaSkip = skip || skipReason(['schematron']);
+{
+  checkWith(cvaSkip)('`schematronValidated` matches the CVA ValueList declarations', () => {
     const ids = new Set([...fs.readFileSync(CVA, 'utf8').matchAll(/<ValueList\s+xml:id="([^"]+)"/g)].map(m => m[1].toLowerCase()));
     for (const [name, e] of Object.entries(codelists)) {
       const inCva = [name, ...(e.aliases ?? [])].some(x => ids.has(x.toLowerCase()));
@@ -66,8 +72,6 @@ if (fs.existsSync(CVA)) {
         `${name}: schematronValidated=${e.schematronValidated} but CVA ValueList present=${inCva}${e.aliases ? ` (aliases: ${e.aliases.join(', ')})` : ''}`);
     }
   });
-} else {
-  console.log(`- skipped: schematronValidated vs the CVA (no espd-validation-schematron checkout at ${schematronRoot()})`);
 }
 
 check('every codelist used by a value type, a criterion leaf or the attribute profile has an entry', () => {
@@ -125,5 +129,3 @@ check('`inlineEnum` matches what the compiler publishes, for every list a criter
   }
   console.log(`    lists used by criteria: ${[...seen].map(([k, v]) => `${k}${v.inlined ? '*' : ''}`).join(', ')}  (* = inlined)`);
 });
-
-console.log(`\nAll ${n} codelist-governance checks passed.`);

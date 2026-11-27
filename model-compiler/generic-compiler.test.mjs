@@ -18,6 +18,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listModeledCodes } from './compile.mjs';
+import { skipReason, checkWith } from './testkit.mjs';
+
+const skip = skipReason(['enrichment']);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,11 +45,10 @@ const transformationModules = () => fs.readdirSync(here)
 
 const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
-let n = 0;
-const check = (name, fn) => { fn(); n++; console.log(`✓ ${name}`); };
+const check = checkWith(skip);
 
 const modules = transformationModules();
-const codes = listModeledCodes();
+const codes = skip ? [] : listModeledCodes();
 
 check('the discovery sets are non-trivial (guards the guard)', () => {
   assert.ok(modules.length >= 5, `expected to discover the transformation modules, got ${modules.join(', ')}`);
@@ -71,5 +73,3 @@ check('no transformation module hard-codes a part container key', () => {
     }
   }
 });
-
-console.log(`\nAll ${n} generic-compiler checks passed (${modules.length} modules, ${codes.length} criteria).`);

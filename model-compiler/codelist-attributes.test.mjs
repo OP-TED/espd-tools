@@ -7,20 +7,12 @@ import {
   loadCodelistProfile, attributesFor, validateCodelistProfile,
   loadValidatedCodelistProfile, parseSchematronAttributeRules,
 } from './codelist-attributes.mjs';
+import { skipReason, checkWith, expectThrowWith } from './testkit.mjs';
 
-let failures = 0;
-function check(name, fn) {
-  try { fn(); console.log(`\u2713 ${name}`); }
-  catch (err) { failures++; console.error(`\u2717 ${name}: ${err.message.split('\n')[0]}`); }
-}
-function expectThrow(name, fn, snippet) {
-  try { fn(); failures++; console.error(`\u2717 ${name}: expected error, none thrown`); }
-  catch (err) {
-    if (snippet && !err.message.includes(snippet)) {
-      failures++; console.error(`\u2717 ${name}: error missing '${snippet}' (got: ${err.message.split('\n')[0]})`);
-    } else console.log(`\u2713 ${name}`);
-  }
-}
+const skip = skipReason(['enrichment', 'schematron']);
+
+const check = checkWith(skip);
+const expectThrow = expectThrowWith(skip);
 
 // Profile matches the Schematron exactly for every mapped codelist.
 check('profile validates against the real Schematron', () => {
@@ -72,6 +64,3 @@ check('schematron parser extracts the ValueDataTypeCode listID', () => {
   );
   assert.equal(rules.get('cac:TenderingCriterionProperty/cbc:ValueDataTypeCode').get('listID'), 'response-data-type');
 });
-
-if (failures) { console.error(`\n${failures} test(s) failed.`); process.exit(1); }
-console.log('\nAll codelist-attribute tests passed.');

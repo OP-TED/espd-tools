@@ -9,6 +9,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { publishReadme } from './publish.mjs';
+import { check } from './testkit.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const envelope = {
@@ -17,9 +18,6 @@ const envelope = {
   ublVersion: '6.5',
   counts: { criteria: 11, valueTypes: 22, instanceDataFiles: 33, xmlMappingFiles: 44, compiledFiles: 55, partSections: 66 },
 };
-
-let n = 0;
-const check = (name, fn) => { fn(); n++; console.log(`✓ ${name}`); };
 
 const render = (registries = {}) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'espd-readme-'));
@@ -75,5 +73,3 @@ check('an unknown placeholder in the template is an error', () => {
     fs.writeFileSync(template, original);
   }
 });
-
-console.log(`\nAll ${n} publish-readme tests passed.`);
