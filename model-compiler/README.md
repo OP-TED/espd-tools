@@ -162,3 +162,26 @@ the C07 and breadth probes, the response-mapping roundtrip) were not ported: the
 mapping engine and the form generator, which stay in the demo. Their intent is covered by the generic
 roundtrip over all 62 published criteria in the demo and by the parity and generic tests here; porting
 their generator-only assertions is open work.
+
+## Open TODOs
+
+- **Move the mapping engine and the tests that need it out of `espd-demo`.** The published model is data: instance-data
+  schemas, UBL mapping specs and the administrative parts. Whether it works is tested only in the demo, because the
+  tests need a mapping engine and the engine lives there (`espd-demo/model/mapping-engine`: `mapper.mjs`,
+  `resolve-scheme-agency.mjs`, `expand-codelist-attributes.mjs`, `codelist-profile.mjs`, `compose-document*.mjs`,
+  `envelope.json`). Tests that need it: the six part tests (`model/parts-tests`), `roundtrip-generated.test.mjs`,
+  `compose-document.test.mjs`, `resolve-scheme-agency.test.mjs`, `records-value-attributes.test.mjs` and the Schematron
+  runner (`schematron-validate*.mjs`, which needs Java and the Saxon jar). Proposal: a package here holds the engine
+  and these tests and runs them against the published `ESPD-EDM/model`; the demo consumes the engine. Open: how the
+  demo consumes it (it ships the engine to the browser; options are a vendored copy, a dependency or a release artifact,
+  tied to the sibling-checkout coupling), whether `envelope.json` (the UBL document header) is model data to publish,
+  whether the Schematron tests stay optional when Java or the jar is missing, where the tests run (here, in ESPD-EDM's
+  Checks workflow, or both), and how the engine version relates to `envelopeVersion`. Done when the engine and these
+  tests run from here against `ESPD-EDM/model` with configurable inputs, the demo has no copy of the engine and its
+  end-to-end tests pass. Out of scope: changing what the engine does.
+- **Registry `source` paths.** `publish.mjs` rewrites the sibling-layout `source` paths of `value-types.json` and
+  `codelist-attributes.json` (`SOURCE_PATCHES`). That goes away when the registries carry repository-neutral references;
+  see "Open TODOs" in `espd-conceptual-model/enrichment/README.md`.
+- **Run `verify.mjs` in ESPD-EDM's Checks workflow:** see "Verifying a published model" above.
+- **The known limitations of the published mappings** and the generator probe tests that were not ported are listed under
+  "Status".
