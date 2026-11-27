@@ -20,6 +20,7 @@ import { generateRequestMapping } from './generate-request-mapping.mjs';
 import { generateResponseMapping } from './generate-response-mapping.mjs';
 import { generateInstanceSchema, generateExample } from './generate-instance-schema.mjs';
 import { criteriaDir } from './config.mjs';
+import { compareCodePoint } from './order.mjs';
 
 export function loadEdm(sourcePath) {
   return JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
@@ -40,7 +41,7 @@ export function listModeledCodes(dir = criteriaDir()) {
   return fs.readdirSync(dir)
     .filter(f => f.endsWith('.sidecar.json'))
     .map(f => f.replace('.sidecar.json', ''))
-    .sort();
+    .sort(compareCodePoint);
 }
 
 export function compile(edm, code, sidecar) {
@@ -78,13 +79,14 @@ export function generateMappings(compiled, registry) {
  *                         consumer can derive its own layers (e.g. a form) from the
  *                         published model without the EA export or the sidecars.
  *
- * XML mappings are skipped (with a note) when the criterion has a shape the mapping
- * generators do not yet support, so the other layers still emit.
+ * A mapping that cannot be generated is an error: the criterion fails to compile and nothing
+ * is published, rather than publishing a model that lacks its XML mapping. (`mappings` is the
+ * mapping generator; it is a parameter so that this can be tested.)
  *
  * Returns { written, files }: `written` are the paths relative to the cwd, `files`
- * the paths relative to `root` (forward slashes; mappings null when skipped).
+ * the paths relative to `root` (forward slashes).
  */
-export function emitModel(code, compiled, registry, { root, partId } = {}) {
+export function emitModel(code, compiled, registry, { root, partId, mappings = generateMappings } = {}) {
   if (!root) throw new Error('emitModel: { root } is required');
   const written = [];
   const write = (sub, name, obj) => {
@@ -97,24 +99,26 @@ export function emitModel(code, compiled, registry, { root, partId } = {}) {
   };
 
   const hints = loadHints(code);
-  const files = { requestMapping: null, responseMapping: null };
-  files.instanceSchema = write('instance-data', `${code}.schema.json`, generateInstanceSchema(compiled, registry, { partId, hints, outputId: code }));
-  files.instanceExample = write('instance-data', `${code}.example.json`, generateExample(compiled, registry, hints));
+  const instanceSchema = write('instance-data', `${code}.schema.json`, generateInstanceSchema(compiled, registry, { partId, hints, outputId: code }));
+  const instanceExample = write('instance-data', `${code}.example.json`, generateExample(compiled, registry, hints));
 
+  let request, response;
   try {
-    const { request, response } = generateMappings(compiled, registry);
-    files.requestMapping = write('xml-mapping', `${code}.request.mapping.json`, request);
-    files.responseMapping = write('xml-mapping', `${code}.response.mapping.json`, response);
+    ({ request, response } = mappings(compiled, registry));
   } catch (err) {
-    process.stderr.write(`  (xml-mapping skipped for ${code}: ${err.message.split('\n')[0]})\n`);
+    throw new Error(`The XML mapping of '${code}' could not be generated: ${err.message}`, { cause: err });
   }
+  const requestMapping = write('xml-mapping', `${code}.request.mapping.json`, request);
+  const responseMapping = write('xml-mapping', `${code}.response.mapping.json`, response);
 
-  files.compiled = write('compiled', `${code}.json`, {
+  const compiledFile = write('compiled', `${code}.json`, {
     $comment: 'GENERATED. The criterion as compiled from the EA structure plus the enrichment: structure, semantic ids, instance bindings and value types, with the instance-data constraint hints. Lets a consumer derive its own layers (for example a form) from the published model. Do not hand-edit; regenerate.',
     key: code,
     partId: partId ?? null,
     criterion: compiled,
     hints: hints ?? null,
   });
+  // The key order is the one the published envelope has always had; keeping it keeps the published bytes the same.
+  const files = { requestMapping, responseMapping, instanceSchema, instanceExample, compiled: compiledFile };
   return { written, files };
 }

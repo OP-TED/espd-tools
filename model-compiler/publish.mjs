@@ -7,6 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enrichmentFile } from './config.mjs';
 import { schemaPath } from './envelope.mjs';
+import { compareCodePoint } from './order.mjs';
+import { readLf, writeLf, copyLf } from './lf.mjs';
 
 /** Registries published verbatim from the enrichment folder (see patchSource below). */
 export const REGISTRY_FILES = [
@@ -53,17 +55,17 @@ export function publishRegistries(root) {
   const dir = path.join(root, 'registries');
   fs.mkdirSync(dir, { recursive: true });
   for (const f of REGISTRY_FILES) {
-    const text = patchSource(f, fs.readFileSync(enrichmentFile('registries', f), 'utf8'));
-    fs.writeFileSync(path.join(dir, f), text);
+    const text = patchSource(f, readLf(enrichmentFile('registries', f)));
+    writeLf(path.join(dir, f), text);
   }
   return REGISTRY_FILES.map(f => `registries/${f}`);
 }
 
 /** Copy the envelope schema into <root>/schema. */
-export function publishSchema(root) {
+export function publishSchema(root, source = schemaPath) {
   const dir = path.join(root, 'schema');
   fs.mkdirSync(dir, { recursive: true });
-  fs.copyFileSync(schemaPath, path.join(dir, 'compiled-model.schema.json'));
+  copyLf(source, path.join(dir, 'compiled-model.schema.json'));
 }
 
 /**
@@ -75,7 +77,7 @@ function provisionalRegistriesList(root) {
   const dir = path.join(root, 'registries');
   const items = [];
   if (fs.existsSync(dir)) {
-    for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.json')).sort()) {
+    for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.json')).sort(compareCodePoint)) {
       const doc = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
       if (doc.status === 'provisional') items.push(`  - \`registries/${f}\`: ${doc.statusNote ?? '(no note)'}`);
     }

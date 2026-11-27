@@ -48,7 +48,21 @@ try {
       }],
     }]);
     for (const rel of [parts[0].manifest, ...Object.values(parts[0].sections[0]).filter((v) => v.startsWith('parts/'))]) {
-      assert.equal(fs.readFileSync(path.join(out, rel), 'utf8'), fs.readFileSync(path.join(enrichment, rel), 'utf8'), `${rel} is copied verbatim`);
+      const lf = (text) => text.replace(/\r\n/g, '\n');
+      assert.equal(fs.readFileSync(path.join(out, rel), 'utf8'), lf(fs.readFileSync(path.join(enrichment, rel), 'utf8')), `${rel} is copied (line endings normalised to LF)`);
+    }
+  });
+
+  check('parts written with CRLF line endings are published with LF', () => {
+    build();
+    for (const f of ['index.json', 'sectionA.schema.json', 'sectionA.example.json', 'sectionA.mapping.json', 'sectionA.form.json']) {
+      write(f, fs.readFileSync(path.join(dir, f), 'utf8').replace(/\r?\n/g, '\r\n'));
+    }
+    assert.ok(fs.readFileSync(path.join(dir, 'sectionA.form.json'), 'utf8').includes('\r\n'), 'the fixture really has CRLF');
+    const out = path.join(tmp, 'out-lf');
+    const parts = publishParts(out);
+    for (const rel of [parts[0].manifest, ...Object.values(parts[0].sections[0]).filter((v) => v.startsWith('parts/'))]) {
+      assert.ok(!fs.readFileSync(path.join(out, rel), 'utf8').includes('\r'), `${rel} has no CR`);
     }
   });
 

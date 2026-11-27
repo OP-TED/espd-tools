@@ -98,27 +98,32 @@ function readNode(component) {
 }
 
 /**
- * Find a criterion by code anywhere in the parts/sections tree. When several
- * criteria share a code (the Part II/V 'OT' criteria all use code 'OT'), an
- * optional `tag` (e.g. 'OT65') disambiguates. Without a tag, the first match by
- * code is returned (the normal case: a unique code).
+ * Find a criterion by code anywhere in the parts/sections tree. When several criteria share a
+ * code, an optional `tag` (for example 'C65_OT') picks one. A code that matches more than one
+ * criterion without a tag that settles it is an error: returning the first match would compile
+ * the wrong criterion without any sign of it. Returns undefined when nothing matches.
  */
 export function findCriterion(edm, code, tag) {
+  const matches = [];
   for (const part of edm) {
     for (const section of part.sections ?? []) {
-      const found = (section.criteria ?? []).find(c =>
-        c.type === 'CRITERION' && c.code === code && (tag === undefined || c.tag === tag));
-      if (found) return found;
+      for (const c of section.criteria ?? []) {
+        if (c.type === 'CRITERION' && c.code === code && (tag === undefined || c.tag === tag)) matches.push(c);
+      }
     }
   }
-  return undefined;
+  if (matches.length > 1) {
+    const tags = matches.map(c => c.tag ?? '(no tag)').join(', ');
+    throw new Error(`Criterion code '${code}' matches ${matches.length} criteria in espd-edm.json (tags: ${tags}); give the tag to say which one`);
+  }
+  return matches[0];
 }
 
 /**
  * Read the minimal structural core of one criterion from a parsed espd-edm.json.
  * @param {Array} edm parsed espd-edm.json (array of parts)
  * @param {string} code criterion code, e.g. 'slc-stand-to-spec-avg'
- * @param {string} [tag] EA tag to disambiguate shared codes (e.g. 'OT65')
+ * @param {string} [tag] EA tag to disambiguate shared codes (for example 'C65_OT')
  * @returns the structural-core criterion tree
  */
 export function readStructuralCore(edm, code, tag) {

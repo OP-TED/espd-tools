@@ -16,15 +16,15 @@ const provenance = {
   enrichment: { sha256: sha, files: 3 },
   valueTypeSource: { shortName: 'ResponseDataType', version: '5.0.0' },
 };
-const files = (k, mappings = true) => ({
+const files = (k) => ({
   instanceSchema: `instance-data/${k}.schema.json`,
   instanceExample: `instance-data/${k}.example.json`,
   compiled: `compiled/${k}.json`,
-  requestMapping: mappings ? `xml-mapping/${k}.request.mapping.json` : null,
-  responseMapping: mappings ? `xml-mapping/${k}.response.mapping.json` : null,
+  requestMapping: `xml-mapping/${k}.request.mapping.json`,
+  responseMapping: `xml-mapping/${k}.response.mapping.json`,
 });
-const entry = (key, part, valueTypes, mappings = true) =>
-  ({ key, id: key, code: key, part, leaves: 3, repeatableBindings: 0, valueTypes, files: files(key, mappings) });
+const entry = (key, part, valueTypes) =>
+  ({ key, id: key, code: key, part, leaves: 3, repeatableBindings: 0, valueTypes, files: files(key) });
 const valueTypeRegistry = { valueTypes: { INDICATOR: { requestXml: {}, responseXml: {} }, DATE: { responseXml: {} }, URL: {} } };
 
 const section = (p, id) => ({ id, schema: `parts/part${p}/section${id}.schema.json`, example: `parts/part${p}/section${id}.example.json`, mapping: `parts/part${p}/section${id}.mapping.json`, form: `parts/part${p}/section${id}.form.json` });
@@ -68,14 +68,15 @@ check('the same input in any order yields identical bytes', () => {
   assert.equal(JSON.stringify(a), JSON.stringify(b));
 });
 
-check('counts and value-type usage are derived, a skipped mapping counts as absent', () => {
-  const env = make([entry('x', 'III', ['INDICATOR', 'DATE']), entry('y', 'IV', ['INDICATOR'], false)]);
-  assert.deepEqual(env.counts, { criteria: 2, valueTypes: 3, instanceDataFiles: 4, xmlMappingFiles: 2, compiledFiles: 2, partSections: 4 });
+check('counts and value-type usage are derived; every criterion has both mappings', () => {
+  const env = make([entry('x', 'III', ['INDICATOR', 'DATE']), entry('y', 'IV', ['INDICATOR'])]);
+  assert.deepEqual(env.counts, { criteria: 2, valueTypes: 3, instanceDataFiles: 4, xmlMappingFiles: 4, compiledFiles: 2, partSections: 4 });
   const usage = Object.fromEntries(env.valueTypes.map(v => [v.name, v.usedBy]));
   assert.deepEqual(usage, { DATE: 1, INDICATOR: 2, URL: 0 });
   const bindings = Object.fromEntries(env.valueTypes.map(v => [v.name, [v.request, v.response]]));
   assert.deepEqual(bindings, { DATE: [false, true], INDICATOR: [true, true], URL: [false, false] });
-  assert.equal(env.criteria[1].files.requestMapping, null);
+  const nullMapping = structuredClone(env); nullMapping.criteria[0].files.requestMapping = null;
+  assert.ok(validateEnvelope(nullMapping).length, 'a missing mapping is not valid: a criterion without its mapping fails the build');
   assert.deepEqual(validateEnvelope(env), []);
 });
 

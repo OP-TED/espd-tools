@@ -14,9 +14,10 @@
 // ESPD_EDM_JSON / ESPD_ENRICHMENT_DIR / ESPD_CODELISTS_DIR / ESPD_SCHEMATRON_ROOT
 // (see config.mjs). --codelists must contain the .gc files and codelists.json.
 //
-// A full run (no --code) first removes what a previous run produced under --out, then
-// writes everything, including the envelope. A --code run only (re)writes those
-// criteria and leaves the rest of --out alone.
+// A full run (no --code) builds everything, including the envelope, in a staging folder next to
+// --out. Only when all of it succeeded does it replace what a previous run produced under --out,
+// so a failed run leaves the previous output as it was. A --code run only (re)writes those
+// criteria in place and leaves the rest of --out alone.
 //
 // Exit code: 1 if any criterion fails to compile (nothing is published then),
 // 2 for unusable arguments or inputs.
@@ -29,7 +30,7 @@ import { configure, edmPath, enrichmentDir, codelistsDir, schematronRoot } from 
 import { loadEdm, loadSidecar, listModeledCodes, compile, emitModel } from './compile.mjs';
 import { leavesOf } from './read-structural-core.mjs';
 import { buildEnvelope, validateEnvelope, hashFile, hashEnrichment, readVersions } from './envelope.mjs';
-import { cleanOwned, publishRegistries, publishSchema, publishReadme } from './publish.mjs';
+import { cleanOwned, OWNED, publishRegistries, publishSchema, publishReadme } from './publish.mjs';
 import { publishParts } from './parts.mjs';
 
 const { values } = parseArgs({
@@ -75,7 +76,15 @@ for (const c of codes) {
   }
 }
 
-if (fullRun) cleanOwned(root);
+// Where this run writes. A full run stages its output (see the header) and swaps it in at the end.
+const stage = fullRun ? path.join(path.dirname(root), `.${path.basename(root)}.building-${process.pid}`) : null;
+const outRoot = stage ?? root;
+if (stage) {
+  fs.rmSync(stage, { recursive: true, force: true });
+  fs.mkdirSync(stage, { recursive: true });
+  // process.exit() is used for every failure below; this removes the staging folder on each of them.
+  process.on('exit', () => fs.rmSync(stage, { recursive: true, force: true }));
+}
 
 const edm = loadEdm(edmPath());
 const entries = [];
@@ -88,7 +97,7 @@ for (const code of codes) {
     registry = result.registry;
     valueTypeSource = result.provenance;
     const partId = PART_BY_CONTAINER[sidecar.criterion.instanceModel.containerPath[0]];
-    const emitted = emitModel(code, compiled, registry, { root, partId });
+    const emitted = emitModel(code, compiled, registry, { root: outRoot, partId });
     files += emitted.written.length;
     const leaves = leavesOf(compiled);
     entries.push({
@@ -122,15 +131,15 @@ if (fullRun) {
     process.exit(2);
   }
   const pkg = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'package.json'), 'utf8'));
-  const registries = publishRegistries(root);
+  const registries = publishRegistries(outRoot);
   let parts;
   try {
-    parts = publishParts(root);
+    parts = publishParts(outRoot);
   } catch (err) {
     process.stderr.write(`${err.message}\n`);
     process.exit(1);
   }
-  publishSchema(root);
+  publishSchema(outRoot);
   const envelope = buildEnvelope({
     ...versions,
     provenance: {
@@ -150,7 +159,16 @@ if (fullRun) {
     process.stderr.write(`The generated compiled-model.json does not match its schema:\n${problems.map(p => `  - ${p}`).join('\n')}\n`);
     process.exit(1);
   }
-  fs.writeFileSync(path.join(root, 'compiled-model.json'), JSON.stringify(envelope, null, 2) + '\n');
-  publishReadme(root, envelope);
+  fs.writeFileSync(path.join(outRoot, 'compiled-model.json'), JSON.stringify(envelope, null, 2) + '\n');
+  publishReadme(outRoot, envelope);
+
+  // Everything succeeded: replace the previous output (and only the files this compiler owns).
+  if (stage) {
+    cleanOwned(root);
+    fs.mkdirSync(root, { recursive: true });
+    for (const name of OWNED) {
+      if (fs.existsSync(path.join(stage, name))) fs.renameSync(path.join(stage, name), path.join(root, name));
+    }
+  }
   process.stderr.write(`Wrote compiled-model.json (ESPD ${envelope.espdVersion}, UBL ${envelope.ublVersion}), parts, registries, schema and README.\n`);
 }

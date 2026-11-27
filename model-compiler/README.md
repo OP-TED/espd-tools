@@ -16,11 +16,24 @@ For every criterion that has a `<code>.sidecar.json` in the enrichment folder it
 
 1. reads the structural core from `espd-edm.json` and overlays the sidecar (semantic ids,
    instance bindings, value types),
-2. **gates on structural equivalence**: the compiled criterion projected back onto the EA
-   structure must equal the source, so enrichment that drifted from a changed EA model fails the
-   build instead of silently diverging,
-3. validates every value type used against the value-type registry and `ResponseDataType.gc`,
-4. emits the per-criterion layers (below).
+2. **fails when the enrichment no longer fits the EA structure.** That is detected while the sidecar
+   is overlaid (`overlay-enrichment.mjs`): a sidecar path that is not in the structure, a value leaf
+   without a sidecar entry, a sidecar entry that no leaf uses, a duplicate semantic id, or a group
+   binding that does not match its cardinality. Enrichment that drifted from a changed EA model fails
+   the build instead of silently diverging,
+3. **checks that the overlay left the structure alone** (`structural-equivalence.mjs`): the structural
+   fields of the compiled criterion must equal the structural core it started from. This guards against
+   the overlay changing the structure; it is not an independent comparison with the EA export, because
+   both sides are read by the same reader,
+4. validates every value type used against the value-type registry and `ResponseDataType.gc`,
+5. emits the per-criterion layers (below). A criterion whose XML mapping cannot be generated fails; it is
+   never published without its mapping.
+
+A criterion code that several EA criteria share (the Part II and V "other" criteria) must be given with
+its tag; a sidecar that names an ambiguous code without one is an error, not a guess.
+
+Text files are published with LF line endings, whatever the checkout has (`lf.mjs`), and every list is in
+code-point order (`order.mjs`), so the same sources give the same bytes on every machine.
 
 The README of the published folder is rendered from `model-readme.template.md` (placeholders are filled from the envelope); edit that file to change what ESPD-EDM/model/README.md says.
 
@@ -77,8 +90,10 @@ node build.mjs [--out <dir>] [--code <criterion-code>]... [--source-ref <text>]
                [--codelists <dir>] [--schematron <espd-validation-schematron>]
 ```
 
-A full run (no `--code`) first removes what a previous run produced under `--out`, then writes
-everything. A run with `--code` only writes those criteria and leaves the rest of `--out` alone.
+A full run (no `--code`) builds everything in a staging folder next to `--out` and replaces what a previous
+run produced (the folders and files this compiler owns) only when all of it succeeded, so a failed run leaves
+the previous output as it was. Other files in `--out` are never touched. A run with `--code` writes those
+criteria in place and leaves the rest of `--out` alone.
 `--source-ref` is recorded in the envelope (the workflow passes the source commits).
 
 ### Inputs

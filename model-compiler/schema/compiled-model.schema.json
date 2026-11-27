@@ -81,14 +81,14 @@
           "valueTypes": { "type": "array", "items": { "type": "string" }, "description": "Distinct value types used, sorted." },
           "files": {
             "type": "object",
-            "description": "Paths relative to the model folder; mappings are null when the criterion has a shape the mapping generators do not support yet.",
+            "description": "Paths relative to the model folder. Every criterion has both mappings: a criterion whose mapping cannot be generated fails the build.",
             "required": ["instanceSchema", "instanceExample", "compiled", "requestMapping", "responseMapping"],
             "properties": {
               "instanceSchema": { "type": "string" },
               "instanceExample": { "type": "string" },
               "compiled": { "type": "string" },
-              "requestMapping": { "type": ["string", "null"] },
-              "responseMapping": { "type": ["string", "null"] }
+              "requestMapping": { "type": "string" },
+              "responseMapping": { "type": "string" }
             },
             "additionalProperties": false
           }

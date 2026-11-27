@@ -11,6 +11,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { enrichmentFile } from './config.mjs';
+import { compareCodePoint } from './order.mjs';
+import { copyLf } from './lf.mjs';
 
 /** Per section: the four files, in the order the envelope lists them. */
 export const SECTION_KINDS = [
@@ -27,7 +29,7 @@ const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 export function listParts() {
   const dir = partsDir();
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+  return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort(compareCodePoint);
 }
 
 /**
@@ -95,7 +97,7 @@ export function publishParts(root) {
   return checked.map(({ name, manifest }) => {
     const target = path.join(root, 'parts', name);
     fs.mkdirSync(target, { recursive: true });
-    const copy = (file) => { fs.copyFileSync(path.join(partsDir(), name, file), path.join(target, file)); return `parts/${name}/${file}`; };
+    const copy = (file) => { copyLf(path.join(partsDir(), name, file), path.join(target, file)); return `parts/${name}/${file}`; };
     const out = { part: manifest.part, manifest: copy('index.json'), sections: [] };
     for (const id of manifest.sections) {
       const section = { id };
