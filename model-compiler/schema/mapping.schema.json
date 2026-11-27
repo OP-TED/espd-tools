@@ -1,0 +1,311 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/OP-TED/ESPD-EDM/model/schema/mapping.schema.json",
+  "title": "ESPD XML mapping spec",
+  "description": "The declarative format of model/xml-mapping/*.mapping.json and model/parts/*/section*.mapping.json. A spec maps the instance data of the model (a JSON document, addressed by dotted paths) to a UBL ESPD Request or Response and back. One spec drives both directions: a rule is a correspondence between a path in the instance data and an element path in the XML, read left to right to write XML and right to left to read it. The format is a contract for implementations: an engine that runs these specs must support every construct below. (The reference engine is espd-demo/model/mapping-engine/mapper.mjs.)\n\nPaths in the instance data are dotted (partIV.selectionCriteria.x.response.turnover). `[]` after a segment flattens across an array (a[].b). Paths into the XML are slash-separated element names with namespace prefixes (cac:TenderingCriterion/cbc:ID). An attribute value is a constant, a path into the instance data ({ from }) or a derived value ({ fromMap }). A leaf that has no value in the instance data produces no element.",
+  "type": "object",
+  "required": ["target", "rules"],
+  "properties": {
+    "$comment": { "type": "string" },
+    "target": {
+      "type": "object",
+      "description": "The XML document the spec writes: the root element and the namespaces declared on it (an empty prefix is the default namespace).",
+      "required": ["root", "namespaces"],
+      "properties": {
+        "$comment": { "type": "string" },
+        "root": { "type": "string", "minLength": 1 },
+        "namespaces": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": false
+    },
+    "rules": {
+      "type": "array",
+      "description": "Applied in order. Every rule is exactly one of: a value rule, a forEach rule, a records rule, a structure rule (or a comment-only placeholder, which does nothing).",
+      "items": { "$ref": "#/definitions/rule" }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "path": { "type": "string", "minLength": 1 },
+    "scalar": { "anyOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }] },
+
+    "attributeValue": {
+      "description": "An XML attribute: a constant, a value from the instance data, or a value derived from another field.",
+      "anyOf": [
+        { "$ref": "#/definitions/scalar" },
+        {
+          "type": "object",
+          "description": "The value of an instance-data path; read back into that path on import.",
+          "required": ["from"],
+          "properties": { "from": { "$ref": "#/definitions/path" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Derived: the value of another field (path, relative to the current item) is looked up in a map; the default applies when there is no path or the value is not in the map. Written on export only, never read back. In a published spec the map is named, not spelled out: { profile } refers to a profile of registries/scheme-agency-profile.json, which an engine resolves into { map, default } before it runs the spec.",
+          "required": ["fromMap"],
+          "properties": {
+            "fromMap": {
+              "anyOf": [
+                {
+                  "description": "As published: a named profile.",
+                  "type": "object",
+                  "required": ["profile"],
+                  "properties": {
+                    "path": { "$ref": "#/definitions/path" },
+                    "profile": { "type": "string", "minLength": 1 }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "description": "As the engine runs it, after the profile is resolved.",
+                  "type": "object",
+                  "required": ["map", "default"],
+                  "properties": {
+                    "path": { "$ref": "#/definitions/path" },
+                    "map": { "type": "object", "additionalProperties": { "$ref": "#/definitions/scalar" } },
+                    "default": { "$ref": "#/definitions/scalar" }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "attributes": { "type": "object", "additionalProperties": { "$ref": "#/definitions/attributeValue" } },
+
+    "rule": {
+      "type": "object",
+      "if": { "properties": { "structure": true }, "required": ["structure"] },
+      "then": { "$ref": "#/definitions/structureRule" },
+      "else": {
+        "if": { "properties": { "records": true }, "required": ["records"] },
+        "then": { "$ref": "#/definitions/recordsRule" },
+        "else": {
+          "if": { "properties": { "forEach": true }, "required": ["forEach"] },
+          "then": { "$ref": "#/definitions/forEachRule" },
+          "else": {
+            "if": { "properties": { "to": true }, "required": ["to"] },
+            "then": { "$ref": "#/definitions/valueRule" },
+            "else": { "$ref": "#/definitions/commentRule" }
+          }
+        }
+      }
+    },
+
+    "commentRule": {
+      "description": "A placeholder that carries only a comment; it does nothing.",
+      "type": "object",
+      "required": ["$comment"],
+      "properties": { "$comment": { "type": "string" } },
+      "additionalProperties": false
+    },
+
+    "valueRule": {
+      "description": "Write one value: the instance-data value at `from` (or the constant) becomes the text of the element at `to`, with `attributes`. Read back, the text of that element is written to `from`. A value that is absent, null or empty writes nothing. When both `from` and `const` are given, `from` wins if it has a value, otherwise the constant is written. Several rules may target the same element path; on import a constant attribute tells them apart.",
+      "type": "object",
+      "required": ["to"],
+      "anyOf": [
+        { "properties": { "from": true }, "required": ["from"] },
+        { "properties": { "const": true }, "required": ["const"] }
+      ],
+      "properties": {
+        "$comment": { "type": "string" },
+        "from": { "$ref": "#/definitions/path" },
+        "to": { "$ref": "#/definitions/path" },
+        "const": { "$ref": "#/definitions/scalar" },
+        "attributes": { "$ref": "#/definitions/attributes" },
+        "when": {
+          "description": "Guard: the rule applies only when the instance-data value at `path` equals `equals`. On import the guard value is restored.",
+          "type": "object",
+          "required": ["path", "equals"],
+          "properties": { "path": { "$ref": "#/definitions/path" }, "equals": { "$ref": "#/definitions/scalar" } },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "forEachRule": {
+      "description": "Repeat an element for every item of the array at `forEach`. The element is `to`; with `item.fields` each field is a value rule resolved against the item; with `item.path` the item is a scalar that goes into that child element; with neither, the scalar is the text of the element itself.",
+      "type": "object",
+      "required": ["forEach", "to"],
+      "properties": {
+        "$comment": { "type": "string" },
+        "forEach": { "$ref": "#/definitions/path" },
+        "to": { "$ref": "#/definitions/path" },
+        "item": {
+          "type": "object",
+          "properties": {
+            "$comment": { "type": "string" },
+            "fields": { "type": "array", "items": { "$ref": "#/definitions/valueRule" } },
+            "path": { "$ref": "#/definitions/path" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "recordKey": {
+      "description": "The identifier element of a record. `to` is its path inside the record, `attributes` its scheme attributes. In the aggregate form `from` names the item field that is the key; in the scalar-item form `key` is the fixed identifier.",
+      "type": "object",
+      "required": ["to"],
+      "properties": {
+        "$comment": { "type": "string" },
+        "to": { "$ref": "#/definitions/path" },
+        "attributes": { "$ref": "#/definitions/attributes" },
+        "from": { "$ref": "#/definitions/path" },
+        "key": { "$ref": "#/definitions/scalar" }
+      },
+      "additionalProperties": false
+    },
+
+    "recordEntry": {
+      "description": "One record of a records rule: its key and exactly one body, a typed value, a nested object or cross-references to another record set.",
+      "type": "object",
+      "required": ["key"],
+      "oneOf": [
+        { "properties": { "value": true }, "required": ["value"] },
+        { "properties": { "object": true }, "required": ["object"] },
+        { "properties": { "references": true }, "required": ["references"] }
+      ],
+      "properties": {
+        "$comment": { "type": "string" },
+        "key": { "$ref": "#/definitions/scalar" },
+        "value": {
+          "type": "object",
+          "required": ["from", "to"],
+          "properties": {
+            "$comment": { "type": "string" },
+            "from": { "$ref": "#/definitions/path" },
+            "to": { "$ref": "#/definitions/path" },
+            "type": { "enum": ["string", "number", "boolean"] },
+            "attributes": { "$ref": "#/definitions/attributes" }
+          },
+          "additionalProperties": false
+        },
+        "object": {
+          "description": "The object at `from`; each field becomes a child element under the wrapper element `to`. Written only when at least one field has a value.",
+          "type": "object",
+          "required": ["from", "to", "fields"],
+          "properties": {
+            "$comment": { "type": "string" },
+            "from": { "$ref": "#/definitions/path" },
+            "to": { "$ref": "#/definitions/path" },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["from", "to"],
+                "properties": { "$comment": { "type": "string" }, "from": { "$ref": "#/definitions/path" }, "to": { "$ref": "#/definitions/path" } },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "references": {
+          "description": "One cross-reference element (`to`, whose last segment holds the id) for the `key` of every item of the array at `forEach`. `resolve` rebuilds the items on import from the shared record set the ids point to.",
+          "type": "object",
+          "required": ["forEach", "key", "to"],
+          "properties": {
+            "$comment": { "type": "string" },
+            "forEach": { "$ref": "#/definitions/path" },
+            "key": { "$ref": "#/definitions/path" },
+            "to": { "$ref": "#/definitions/path" },
+            "resolve": {
+              "type": "object",
+              "required": ["records", "key"],
+              "properties": {
+                "$comment": { "type": "string" },
+                "records": { "$ref": "#/definitions/path" },
+                "key": {
+                  "type": "object",
+                  "required": ["to", "from"],
+                  "properties": { "to": { "$ref": "#/definitions/path" }, "from": { "$ref": "#/definitions/path" } },
+                  "additionalProperties": false
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["from", "to"],
+                    "properties": { "$comment": { "type": "string" }, "from": { "$ref": "#/definitions/path" }, "to": { "$ref": "#/definitions/path" } },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "recordsRule": {
+      "description": "Write a repeated record: a wrapper element (`records`) with a key and a body. Three forms. (1) `entries`: a fixed list of records, or with `forEach` the list is written once for every item of the array (and `childRecords` for arrays nested in the item). (2) `forEach` and `item.fields`: one record per item, all its fields inside it, with the key taken from `key.from`. (3) `forEach` and `item.path`: one record per scalar item, all with the fixed `key.key`, the item in the element `item.path`. `importVia: references` marks a record set that is rebuilt through references and not imported directly.",
+      "type": "object",
+      "required": ["records"],
+      "anyOf": [
+        { "properties": { "entries": true, "key": true }, "required": ["entries", "key"] },
+        { "properties": { "forEach": true, "item": true }, "required": ["forEach", "item"] }
+      ],
+      "properties": {
+        "$comment": { "type": "string" },
+        "records": { "$ref": "#/definitions/path" },
+        "key": { "$ref": "#/definitions/recordKey" },
+        "entries": { "type": "array", "items": { "$ref": "#/definitions/recordEntry" } },
+        "forEach": { "$ref": "#/definitions/path" },
+        "item": {
+          "type": "object",
+          "properties": {
+            "$comment": { "type": "string" },
+            "fields": { "type": "array", "items": { "$ref": "#/definitions/valueRule" } },
+            "path": { "$ref": "#/definitions/path" },
+            "attributes": { "$ref": "#/definitions/attributes" }
+          },
+          "additionalProperties": false
+        },
+        "childRecords": { "type": "array", "items": { "$ref": "#/definitions/recordsRule" } },
+        "importVia": { "const": "references" }
+      },
+      "additionalProperties": false
+    },
+
+    "structureNode": {
+      "description": "A node of an embedded XML structure that mirrors the target XML one to one. `element` names it. It is a container (`children`), a constant leaf (`const`), a leaf bound to instance data (`from`, or `fromItem` inside a repeated element, where '.' is the item itself) or a repeated element (`forEach`, one element per array item). `valueMap` translates an instance value to the emitted text (for example true to a code). Sibling elements are always distinct nodes, so an element name can repeat. Only `from` and `fromItem` leaves, and `{ from }` attributes, are read back on import.",
+      "type": "object",
+      "required": ["element"],
+      "properties": {
+        "$comment": { "type": "string" },
+        "element": { "type": "string", "minLength": 1 },
+        "attributes": { "$ref": "#/definitions/attributes" },
+        "const": { "$ref": "#/definitions/scalar" },
+        "from": { "$ref": "#/definitions/path" },
+        "fromItem": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["string", "number", "boolean"] },
+        "forEach": { "$ref": "#/definitions/path" },
+        "valueMap": { "type": "object", "additionalProperties": { "$ref": "#/definitions/scalar" } },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/structureNode" } }
+      },
+      "additionalProperties": false
+    },
+
+    "structureRule": {
+      "description": "An embedded XML structure written under the document root.",
+      "type": "object",
+      "required": ["structure"],
+      "properties": {
+        "$comment": { "type": "string" },
+        "structure": { "$ref": "#/definitions/structureNode" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

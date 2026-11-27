@@ -46,6 +46,9 @@ Use --help for details on arguments like custom input files or output directorie
 * export-code-lists.js: Logic for generating Genericode XML and fetching external vocabularies.
 
  export-criteria.js: Structural logic for ordering and filtering criteria.
+
+* model-compiler/: compiles `espd-edm.json` plus the enrichment sources from the espd-conceptual-model repository into the instance-data schemas and UBL mapping specs. See [model-compiler/README.md](model-compiler/README.md).
+
 <details>
 
 # Legacy Tools (v4.0.0 and earlier)

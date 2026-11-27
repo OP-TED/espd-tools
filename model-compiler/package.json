@@ -1,0 +1,18 @@
+{
+  "name": "espd-model-compiler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Compiles the EA export (espd-edm.json) plus the enrichment sources into the published, implementer-neutral ESPD model (instance-data schemas, XML mapping specs, compiled criteria, envelope).",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test"
+  },
+  "license": "EUPL-1.2",
+  "dependencies": {
+    "ajv": "8.20.0"
+  }
+}

@@ -1,0 +1,103 @@
+name: Model compiler tests
+
+# Runs the tests of model-compiler on real inputs. Most of them need the EA export, the enrichment sources
+# and the shipped code lists (and a few the Schematron checkout), so this workflow checks out the other
+# repositories next to this one, the layout config.mjs expects, and points the tests at them.
+#
+# ESPD_REQUIRE_INPUTS=1 turns a missing input into a failure. Without it a test that cannot find its input
+# is skipped, which is right for a run by hand and wrong here: a misconfigured checkout must not pass by
+# skipping everything.
+#
+# TODO: the enrichment sources are in espd-conceptual-model#8 and not yet on release/5.0.0. Until that is
+# merged the checkout below uses the branch of that pull request. Then change its default to release/5.0.0.
+
+on:
+  pull_request:
+    paths:
+      - 'model-compiler/**'
+      - '.github/workflows/model-compiler-tests.yml'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'model-compiler/**'
+      - '.github/workflows/model-compiler-tests.yml'
+  workflow_dispatch:
+    inputs:
+      conceptual_model_ref:
+        description: 'espd-conceptual-model ref that holds the enrichment sources (branch, tag or SHA)'
+        required: false
+        default: 'feature/espd-demo-model-enhancements'
+        type: string
+      edm_ref:
+        description: 'ESPD-EDM ref that holds criterion/espd-edm.json and the code lists'
+        required: false
+        default: 'release/5.0.0'
+        type: string
+      schematron_ref:
+        description: 'espd-validation-schematron ref'
+        required: false
+        default: 'develop'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # All four repositories are public, so no token is needed.
+      - name: Checkout espd-tools (this repository)
+        uses: actions/checkout@v4
+        with:
+          path: espd-tools
+
+      - name: Checkout the enrichment sources (espd-conceptual-model)
+        uses: actions/checkout@v4
+        with:
+          repository: OP-TED/espd-conceptual-model
+          ref: ${{ inputs.conceptual_model_ref || 'feature/espd-demo-model-enhancements' }}
+          path: espd-conceptual-model
+
+      - name: Checkout the EA export and the code lists (ESPD-EDM)
+        uses: actions/checkout@v4
+        with:
+          repository: OP-TED/ESPD-EDM
+          ref: ${{ inputs.edm_ref || 'release/5.0.0' }}
+          path: ESPD-EDM
+
+      - name: Checkout the Schematron rules (espd-validation-schematron)
+        uses: actions/checkout@v4
+        with:
+          repository: OP-TED/espd-validation-schematron
+          ref: ${{ inputs.schematron_ref || 'develop' }}
+          path: espd-validation-schematron
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: espd-tools/model-compiler/package-lock.json
+
+      - name: Record what the tests ran against
+        run: |
+          for repo in espd-tools espd-conceptual-model ESPD-EDM espd-validation-schematron; do
+            echo "${repo}: $(git -C "${repo}" rev-parse --short HEAD) ($(git -C "${repo}" rev-parse --abbrev-ref HEAD))"
+          done
+
+      - name: Install
+        working-directory: espd-tools/model-compiler
+        run: npm ci
+
+      - name: Test
+        working-directory: espd-tools/model-compiler
+        env:
+          ESPD_REQUIRE_INPUTS: '1'
+          ESPD_EDM_JSON: ${{ github.workspace }}/ESPD-EDM/criterion/espd-edm.json
+          ESPD_ENRICHMENT_DIR: ${{ github.workspace }}/espd-conceptual-model/enrichment
+          ESPD_CODELISTS_DIR: ${{ github.workspace }}/ESPD-EDM/codelists
+          ESPD_SCHEMATRON_ROOT: ${{ github.workspace }}/espd-validation-schematron
+        run: npm test
