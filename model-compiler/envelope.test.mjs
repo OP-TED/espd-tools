@@ -90,6 +90,12 @@ check('the schema rejects a missing field, a bad hash, an unknown field and a ba
   assert.ok(validateEnvelope(badPart).length, 'unknown part');
   const badVersion = structuredClone(ok); badVersion.envelopeVersion = 2;
   assert.ok(validateEnvelope(badVersion).length, 'unknown envelope version');
+  const withCommit = structuredClone(ok); withCommit.provenance.generator.commit = 'a'.repeat(40);
+  assert.deepEqual(validateEnvelope(withCommit), [], 'the generator commit is optional and may be given');
+  for (const bad of ['abc123', 'A'.repeat(40), 'g'.repeat(40), 'a'.repeat(41)]) {
+    const badCommit = structuredClone(ok); badCommit.provenance.generator.commit = bad;
+    assert.ok(validateEnvelope(badCommit).length, `a commit of '${bad.slice(0, 12)}…' is rejected`);
+  }
 });
 
 check('hashes ignore line endings (a Windows checkout equals a Linux one)', () => {

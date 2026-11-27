@@ -27,7 +27,8 @@ For every criterion that has a `<code>.sidecar.json` in the enrichment folder it
    both sides are read by the same reader,
 4. validates every value type used against the value-type registry and `ResponseDataType.gc`,
 5. emits the per-criterion layers (below). A criterion whose XML mapping cannot be generated fails; it is
-   never published without its mapping.
+   never published without its mapping. Every generated mapping, and every part mapping, is then checked against
+   `schema/mapping.schema.json`; a mapping that does not conform fails the build.
 
 A criterion code that several EA criteria share (the Part II and V "other" criteria) must be given with
 its tag; a sidecar that names an ambiguous code without one is an error, not a guess.
@@ -52,6 +53,7 @@ model/
   README.md                      generated; explains the layout to consumers
   compiled-model.json            the envelope: versions, provenance hashes, inventory
   schema/compiled-model.schema.json
+  schema/mapping.schema.json     the format of every *.mapping.json (draft 2020-12)
   instance-data/<key>.schema.json, <key>.example.json
   xml-mapping/<key>.request.mapping.json, <key>.response.mapping.json
   compiled/<key>.json            the criterion as joined from structure + enrichment (+ hints)
@@ -86,6 +88,7 @@ They are informational.
 cd model-compiler
 npm ci
 node build.mjs [--out <dir>] [--code <criterion-code>]... [--source-ref <text>]
+               [--generator-commit <40-hex sha>]
                [--edm <espd-edm.json>] [--enrichment <dir>]
                [--codelists <dir>] [--schematron <espd-validation-schematron>]
 ```
@@ -95,6 +98,15 @@ run produced (the folders and files this compiler owns) only when all of it succ
 the previous output as it was. Other files in `--out` are never touched. A run with `--code` writes those
 criteria in place and leaves the rest of `--out` alone.
 `--source-ref` is recorded in the envelope (the workflow passes the source commits).
+`--generator-commit` records the commit of this compiler in `provenance.generator.commit`. Without it the commit
+is read from the git checkout of the compiler, and only when that checkout is clean; otherwise it is left out, so a
+build from uncommitted changes never claims a commit it does not match. A malformed value exits with code 2.
+
+### Versioning
+
+The compiler version (`package.json`, recorded as `provenance.generator.version`) is bumped when a change alters
+the published output for the same inputs. The recorded commit identifies the exact build. `envelopeVersion` changes
+only when the shape of `compiled-model.json` changes incompatibly.
 
 ### Inputs
 
@@ -125,7 +137,8 @@ inputs.
 node verify.mjs --model <ESPD-EDM/model> [--edm <ESPD-EDM/criterion/espd-edm.json>]
 ```
 
-Checks that the envelope conforms to its schema, that every file it lists exists (criteria, parts and
+Checks that the envelope conforms to its schema, that every `*.mapping.json` it lists conforms to the published
+`schema/mapping.schema.json`, that every file it lists exists (criteria, parts and
 registries), that no unlisted file lingers in the generated folders (including `parts/`), and, with `--edm`, that the model was built from that
 structure export. Meant for ESPD-EDM's own checks.
 
@@ -200,7 +213,7 @@ their generator-only assertions is open work.
 ## Open TODOs
 
 - **Move the mapping engine and the tests that need it out of `espd-demo`.** The published model is data: instance-data
-  schemas, UBL mapping specs and the administrative parts. Whether it works is tested only in the demo, because the
+  schemas, UBL mapping specs and the administrative parts. The mapping format has a published schema (`schema/mapping.schema.json`), which every mapping is validated against; what is still missing is a reference engine outside the demo. Whether it works is tested only in the demo, because the
   tests need a mapping engine and the engine lives there (`espd-demo/model/mapping-engine`: `mapper.mjs`,
   `resolve-scheme-agency.mjs`, `expand-codelist-attributes.mjs`, `codelist-profile.mjs`, `compose-document*.mjs`,
   `envelope.json`). Tests that need it: the six part tests (`model/parts-tests`), `roundtrip-generated.test.mjs`,

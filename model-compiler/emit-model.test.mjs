@@ -41,3 +41,17 @@ test('a criterion that maps writes both mappings and lists them', { skip }, () =
     for (const rel of Object.values(files)) assert.ok(fs.existsSync(path.join(root, rel)), `${rel} exists`);
   });
 });
+
+test('a mapping that does not follow the mapping format fails the criterion and names the problem', { skip }, () => {
+  inTempDir((root) => {
+    const bad = { target: { root: 'Doc', namespaces: { '': 'urn:x' } }, rules: [{ structure: { element: 'a', forEach: '' } }] };
+    assert.throws(
+      () => emitModel(code, compiled, registry, { root, partId: 'IV', mappings: () => ({ request: bad, response: bad }) }),
+      (err) => {
+        assert.match(err.message, /The request XML mapping of 'slc-stand-to-gen' does not match schema\/mapping\.schema\.json/);
+        assert.match(err.message, /forEach must NOT have fewer than 1 characters/);
+        return true;
+      });
+    assert.ok(!fs.existsSync(path.join(root, 'xml-mapping')), 'no mapping was written');
+  });
+});

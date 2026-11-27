@@ -21,6 +21,7 @@ import { generateResponseMapping } from './generate-response-mapping.mjs';
 import { generateInstanceSchema, generateExample } from './generate-instance-schema.mjs';
 import { criteriaDir } from './config.mjs';
 import { compareCodePoint } from './order.mjs';
+import { validateMapping } from './mapping-schema.mjs';
 
 export function loadEdm(sourcePath) {
   return JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
@@ -80,8 +81,9 @@ export function generateMappings(compiled, registry) {
  *                         published model without the EA export or the sidecars.
  *
  * A mapping that cannot be generated is an error: the criterion fails to compile and nothing
- * is published, rather than publishing a model that lacks its XML mapping. (`mappings` is the
- * mapping generator; it is a parameter so that this can be tested.)
+ * is published, rather than publishing a model that lacks its XML mapping. So is a mapping that
+ * does not match schema/mapping.schema.json, the contract of the mapping format. (`mappings` is
+ * the mapping generator; it is a parameter so that this can be tested.)
  *
  * Returns { written, files }: `written` are the paths relative to the cwd, `files`
  * the paths relative to `root` (forward slashes).
@@ -107,6 +109,12 @@ export function emitModel(code, compiled, registry, { root, partId, mappings = g
     ({ request, response } = mappings(compiled, registry));
   } catch (err) {
     throw new Error(`The XML mapping of '${code}' could not be generated: ${err.message}`, { cause: err });
+  }
+  for (const [side, spec] of [['request', request], ['response', response]]) {
+    const problems = validateMapping(spec);
+    if (problems.length) {
+      throw new Error(`The ${side} XML mapping of '${code}' does not match schema/mapping.schema.json:\n${problems.map(p => `  - ${p}`).join('\n')}`);
+    }
   }
   const requestMapping = write('xml-mapping', `${code}.request.mapping.json`, request);
   const responseMapping = write('xml-mapping', `${code}.response.mapping.json`, response);

@@ -44,7 +44,7 @@ Known limitations of the mapping specs, found by round-tripping every published 
 | `compiled/<key>.json` | The criterion as compiled from the EA structure plus the enrichment (structure, semantic ids, instance bindings, value types) with its constraint hints. Lets an implementation derive its own layers, such as a form, without the EA export. {{compiledFiles}} files. |
 | `parts/<part>/index.json`, `section<L>.schema.json`, `.example.json`, `.mapping.json`, `.form.json` | The administrative parts (I, II, VI), which are not criteria: for each section the instance-data schema, an example, the UBL mapping, and the form (fields, input types, labels, code lists). Authored in the enrichment and published verbatim. {{partSections}} sections. |
 | `registries/` | The shared registries: value types (JSON shape and UBL bindings), the XML encoding profile, fixed code list attribute sets, the scheme-agency policy, the roles, the codelist governance, and the vocabulary of form affordances (UI hints). |
-| `schema/` | JSON Schema of `compiled-model.json`. |
+| `schema/` | JSON Schema of `compiled-model.json` and of the mapping specs (`mapping.schema.json`). |
 
 `<key>` is the criterion's output identity and the file stem of all its files. Most criteria use
 their EA code (for example `slc-stand-to-gen`); the Part II and V "other" criteria use
@@ -58,8 +58,8 @@ their EA code (for example `slc-stand-to-gen`); the Part II and V "other" criter
    The `.example.json` next to it is a valid instance. The administrative parts have their own schemas
    under `parts/`. Together they form one flat document: `{ partI, partII, ..., partVI }`.
 3. Turn instance data into a UBL Request or Response, and back, with the `xml-mapping/<key>` specs and
-   the `parts/<part>/section<L>.mapping.json` specs. The specs are declarative: you need an engine that
-   runs them. [espd-demo](https://github.com/OP-TED/espd-demo) contains one (`model/mapping-engine`) and a
+   the `parts/<part>/section<L>.mapping.json` specs. The specs are declarative and conform to
+   `schema/mapping.schema.json`: you need an engine that runs them. [espd-demo](https://github.com/OP-TED/espd-demo) contains one (`model/mapping-engine`) and a
    round-trip test over every published example.
 4. Build the user interface from `compiled/<key>.json` (structure, value types, constraint hints) and, for
    the administrative parts, from the `parts/<part>/section<L>.form.json` files. Labels and layout of the
@@ -94,7 +94,8 @@ from the structure export in the same commit.
 
 `compiled-model.json` records the SHA-256 of the exact structure export and of the enrichment
 sources the model was built from, so the same inputs can be recognised and a stale model detected.
-The hashes are taken over text with line endings normalised to LF.
+The hashes are taken over text with line endings normalised to LF. It also records the version of the compiler
+and, when the compiler was built from a clean git checkout, its commit (`provenance.generator`).
 
 ## What is not here
 

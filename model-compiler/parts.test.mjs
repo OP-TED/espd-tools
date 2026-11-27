@@ -67,6 +67,12 @@ after(() => fs.rmSync(tmp, { recursive: true, force: true }));
     }
   });
 
+  check('a mapping that does not follow the mapping format is reported', () => {
+    build();
+    write('sectionA.mapping.json', { target: { root: 'R', namespaces: { '': 'urn:x' } }, rules: [{ to: 'cbc:ID' }] });
+    assert.match(checkPart('partI').problems.join('\n'), /sectionA\.mapping\.json: .*must match a schema in anyOf/);
+  });
+
   check('a README.md (design notes) is allowed and is not published', () => {
     build();
     write('README.md', '# notes');

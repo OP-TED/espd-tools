@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { enrichmentFile } from './config.mjs';
 import { schemaPath } from './envelope.mjs';
 import { compareCodePoint } from './order.mjs';
+import { mappingSchemaPath } from './mapping-schema.mjs';
 import { readLf, writeLf, copyLf } from './lf.mjs';
 
 /** Registries published verbatim from the enrichment folder (see patchSource below). */
@@ -61,11 +62,12 @@ export function publishRegistries(root) {
   return REGISTRY_FILES.map(f => `registries/${f}`);
 }
 
-/** Copy the envelope schema into <root>/schema. */
+/** Copy the envelope schema and the schema of the mapping format into <root>/schema. */
 export function publishSchema(root, source = schemaPath) {
   const dir = path.join(root, 'schema');
   fs.mkdirSync(dir, { recursive: true });
   copyLf(source, path.join(dir, 'compiled-model.schema.json'));
+  copyLf(mappingSchemaPath, path.join(dir, 'mapping.schema.json'));
 }
 
 /**

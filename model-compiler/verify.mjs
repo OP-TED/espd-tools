@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { validateEnvelope, hashFile } from './envelope.mjs';
+import { validateMapping } from './mapping-schema.mjs';
 
 const { values } = parseArgs({ options: { model: { type: 'string' }, edm: { type: 'string' } } });
 if (!values.model) {
@@ -54,6 +55,18 @@ if (!problems.length) {
       for (const f of fs.readdirSync(path.join(partsAbs, d.name))) {
         if (!listed.has(`parts/${d.name}/${f}`)) problems.push(`file not in the envelope (stale or hand-added): parts/${d.name}/${f}`);
       }
+    }
+  }
+
+  // Every mapping follows the mapping format, checked against the schema the model itself carries.
+  const mappingSchema = path.join(root, 'schema', 'mapping.schema.json');
+  if (!fs.existsSync(mappingSchema)) {
+    problems.push('schema/mapping.schema.json is missing: a published model carries the schema of its mapping format');
+  } else {
+    for (const rel of [...listed].filter((r) => r.endsWith('.mapping.json') && fs.existsSync(path.join(root, r)))) {
+      let spec;
+      try { spec = JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8')); } catch (err) { problems.push(`${rel}: not valid JSON (${err.message})`); continue; }
+      for (const p of validateMapping(spec, mappingSchema)) problems.push(`${rel}: ${p}`);
     }
   }
 

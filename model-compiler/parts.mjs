@@ -13,6 +13,7 @@ import Ajv from 'ajv';
 import { enrichmentFile } from './config.mjs';
 import { compareCodePoint } from './order.mjs';
 import { copyLf } from './lf.mjs';
+import { validateMapping } from './mapping-schema.mjs';
 
 /** Per section: the four files, in the order the envelope lists them. */
 export const SECTION_KINDS = [
@@ -35,7 +36,8 @@ export function listParts() {
 /**
  * Check one part's sources. Returns the problems (empty = ok) and, when usable, its manifest.
  * Checks: the manifest names the part the folder says; every listed section has its four files;
- * no file is unlisted; each section identifies itself; each example validates against its schema.
+ * no file is unlisted; each section identifies itself; each mapping follows the mapping format
+ * (schema/mapping.schema.json); each example validates against its schema.
  */
 export function checkPart(dirName) {
   const problems = [];
@@ -63,6 +65,9 @@ export function checkPart(dirName) {
     if (docs.form) {
       if (docs.form.part !== manifest.part) problems.push(`${where}.form.json: part is "${docs.form.part}", expected "${manifest.part}"`);
       if (docs.form.section !== id) problems.push(`${where}.form.json: section is "${docs.form.section}", expected "${id}"`);
+    }
+    if (docs.mapping) {
+      for (const p of validateMapping(docs.mapping)) problems.push(`${where}.mapping.json: ${p}`);
     }
     if (docs.schema && docs.example) {
       try {

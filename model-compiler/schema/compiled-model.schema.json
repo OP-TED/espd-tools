@@ -17,7 +17,12 @@
         "generator": {
           "type": "object",
           "required": ["name", "version"],
-          "properties": { "name": { "type": "string" }, "version": { "type": "string" } },
+          "description": "The compiler that built the model: which version of its behaviour, and the exact commit.",
+          "properties": {
+            "name": { "type": "string" },
+            "version": { "type": "string", "description": "The version of the compiler (package.json). It changes when a change to the compiler changes what it publishes for the same inputs." },
+            "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$", "description": "The commit of the compiler that built this model. Absent when the build was not made from a clean checkout." }
+          },
           "additionalProperties": false
         },
         "structure": {

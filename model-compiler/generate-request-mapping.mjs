@@ -214,20 +214,22 @@ function groupContainerPrefix(group) {
 /**
  * Build a group/subgroup node and recurse. `itemPrefixLen` is the binding-path
  * length already consumed by enclosing repeatable containers (so descendant leaf
- * values resolve relative to the current array item). A repeatable group emits a
+ * values resolve relative to the current array item), and `itemSide` the side
+ * (requirement or response) of the innermost one. A repeatable group emits a
  * `forEach` over its array and raises itemPrefixLen for its subtree.
  */
-function groupNode(criterion, node, registry, nested, itemPrefixLen = 0) {
+function groupNode(criterion, node, registry, nested, itemPrefixLen = 0, itemSide = undefined) {
   const element = nested ? 'cac:SubsidiaryTenderingCriterionPropertyGroup' : 'cac:TenderingCriterionPropertyGroup';
   const myPrefix = groupContainerPrefix(node);
   const childPrefix = myPrefix || itemPrefixLen;
+  const childSide = myPrefix ? node.instanceBinding.side : itemSide;
 
   const spec = {
     element,
     children: [
       idNode(node.requestpath),
       { element: 'cbc:PropertyGroupTypeCode', const: CONDITION_CODE[node.condition] ?? 'ON*', attributes: { listID: 'property-group-type' } },
-      ...childNodes(criterion, node, registry, true, childPrefix),
+      ...childNodes(criterion, node, registry, true, childPrefix, childSide),
     ],
   };
 
@@ -238,7 +240,14 @@ function groupNode(criterion, node, registry, nested, itemPrefixLen = 0) {
     // an outer item) the mapper resolves this node's `forEach` against the outer
     // ITEM, so the path must be RELATIVE to it — the binding-path segments after
     // the enclosing prefix (task 7.0c, e.g. periods[].ratios -> `ratios`).
-    spec.forEach = itemPrefixLen
+    //
+    // That only holds when this array is nested in an array of the SAME side. A
+    // response-side array inside a requirement-side item (the evidence blocks of a
+    // ratio period) is not part of the item, and the prefix of the other side would
+    // cut its whole path away, leaving an empty `forEach`. It keeps its absolute path,
+    // as every response-side array does; a Request carries no response data, so the
+    // group is not written either way.
+    spec.forEach = itemPrefixLen && itemSide === node.instanceBinding.side
       ? node.instanceBinding.path.slice(itemPrefixLen).join('.')
       : [
           ...criterion.instanceModel.containerPath,
@@ -251,11 +260,11 @@ function groupNode(criterion, node, registry, nested, itemPrefixLen = 0) {
 }
 
 /** Recurse into a node's children, emitting group/leaf nodes (skips empties). */
-function childNodes(criterion, node, registry, insideGroup, itemPrefixLen = 0) {
+function childNodes(criterion, node, registry, insideGroup, itemPrefixLen = 0, itemSide = undefined) {
   const out = [];
   for (const child of node.children ?? []) {
     if (child.nodeKind === 'group') {
-      out.push(groupNode(criterion, child, registry, insideGroup, itemPrefixLen));
+      out.push(groupNode(criterion, child, registry, insideGroup, itemPrefixLen, itemSide));
     } else if (child.nodeKind === 'requirement' || child.nodeKind === 'question') {
       // A LOT_IDENTIFIER requirement is still emitted here as its
       // cac:TenderingCriterionProperty (the e-Certis group needs it); it ALSO

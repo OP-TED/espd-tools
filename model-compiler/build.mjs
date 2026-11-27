@@ -9,6 +9,7 @@
 //   node build.mjs [--out <dir>] [--code <criterion-code>]... [--source-ref <text>]
 //                  [--edm <espd-edm.json>] [--enrichment <dir>]
 //                  [--codelists <dir>] [--schematron <espd-validation-schematron>]
+//                  [--generator-commit <sha>]
 //
 // Inputs default to the sibling-checkout layout and can also be set through
 // ESPD_EDM_JSON / ESPD_ENRICHMENT_DIR / ESPD_CODELISTS_DIR / ESPD_SCHEMATRON_ROOT
@@ -32,12 +33,14 @@ import { leavesOf } from './read-structural-core.mjs';
 import { buildEnvelope, validateEnvelope, hashFile, hashEnrichment, readVersions } from './envelope.mjs';
 import { cleanOwned, OWNED, publishRegistries, publishSchema, publishReadme } from './publish.mjs';
 import { publishParts } from './parts.mjs';
+import { generatorCommit, COMMIT_PATTERN } from './generator-commit.mjs';
 
 const { values } = parseArgs({
   options: {
     out: { type: 'string', default: 'outputs' },
     code: { type: 'string', multiple: true },
     'source-ref': { type: 'string' },
+    'generator-commit': { type: 'string' },
     edm: { type: 'string' },
     enrichment: { type: 'string' },
     codelists: { type: 'string' },
@@ -47,8 +50,13 @@ const { values } = parseArgs({
 });
 
 if (values.help) {
-  process.stdout.write('Usage: node build.mjs [--out <dir>] [--code <code>]... [--source-ref <text>] [--edm <file>] [--enrichment <dir>] [--codelists <dir>] [--schematron <dir>]\n');
+  process.stdout.write('Usage: node build.mjs [--out <dir>] [--code <code>]... [--source-ref <text>] [--generator-commit <sha>] [--edm <file>] [--enrichment <dir>] [--codelists <dir>] [--schematron <dir>]\n');
   process.exit(0);
+}
+
+if (values['generator-commit'] !== undefined && !COMMIT_PATTERN.test(values['generator-commit'])) {
+  process.stderr.write(`--generator-commit must be a full 40-character commit hash, got '${values['generator-commit']}'\n`);
+  process.exit(2);
 }
 
 configure({ edm: values.edm, enrichment: values.enrichment, codelists: values.codelists, schematron: values.schematron });
@@ -130,7 +138,16 @@ if (fullRun) {
     process.stderr.write(`${err.message}\n`);
     process.exit(2);
   }
-  const pkg = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'package.json'), 'utf8'));
+  const compilerDir = path.dirname(fileURLToPath(import.meta.url));
+  const pkg = JSON.parse(fs.readFileSync(path.join(compilerDir, 'package.json'), 'utf8'));
+  // The commit of this compiler, recorded in the envelope. Given explicitly, or read from the git checkout when it is
+  // clean; otherwise none is recorded and the build says why.
+  let commit = values['generator-commit'];
+  if (commit === undefined) {
+    const found = generatorCommit(compilerDir);
+    commit = found.commit;
+    if (!commit) process.stderr.write(`No generator commit is recorded: ${found.reason}.\n`);
+  }
   const registries = publishRegistries(outRoot);
   let parts;
   try {
@@ -143,7 +160,7 @@ if (fullRun) {
   const envelope = buildEnvelope({
     ...versions,
     provenance: {
-      generator: { name: pkg.name, version: pkg.version },
+      generator: { name: pkg.name, version: pkg.version, ...(commit ? { commit } : {}) },
       structure: { file: 'criterion/espd-edm.json', sha256: hashFile(edmPath()) },
       enrichment: hashEnrichment(enrichmentDir()),
       valueTypeSource: { shortName: valueTypeSource.shortName, version: valueTypeSource.version },

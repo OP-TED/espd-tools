@@ -30,11 +30,13 @@ test('readLf, writeLf and copyLf turn CRLF into LF and leave lone CR and LF alon
   }
 });
 
-test('the envelope schema is published with LF, also when its source has CRLF', () => {
+test('the envelope schema and the mapping schema are published with LF, also when the source has CRLF', () => {
   const dir = tmpDir();
   try {
     publishSchema(dir);
     assert.ok(!hasCr(path.join(dir, 'schema', 'compiled-model.schema.json')));
+    assert.ok(fs.existsSync(path.join(dir, 'schema', 'mapping.schema.json')), 'the schema of the mapping format is published too');
+    assert.ok(!hasCr(path.join(dir, 'schema', 'mapping.schema.json')));
     // The same, from a source that certainly has CRLF (the checkout on this machine may not).
     const crlfSource = path.join(dir, 'crlf.schema.json');
     fs.writeFileSync(crlfSource, fs.readFileSync(schemaPath, 'utf8').replace(/\r?\n/g, '\r\n'));
